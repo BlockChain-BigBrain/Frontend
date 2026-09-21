@@ -31,3 +31,5 @@ SPA 호스팅은 /auth/callback과 /auth/error를 index.html로 연결해야 합
 백엔드 FRONTEND_URL을 실제 프론트 원본으로 변경하세요.
 SameSite=Strict 쿠키를 사용하므로 프론트·백엔드는 같은 사이트에 배포하세요.
 예: app.example.com / api.example.com. HTTPS에서는 COOKIE_SECURE=true를 사용합니다.
+
+프론트 인증 요청은 `target=frontend`와 전용 HttpOnly 쿠키를 사용합니다. Swagger 예시 계정의 로그인 쿠키는 프론트 세션으로 복원하지 않습니다.

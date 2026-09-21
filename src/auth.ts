@@ -9,7 +9,7 @@ export function createAuthClient(baseUrl: string, request: typeof fetch = fetch)
     if (refreshTask) return refreshTask;
     const started = generation;
     refreshTask = (async () => {
-      const response = await request(`${base}/api/v1/auth/refresh`, { method: 'POST', credentials: 'include' });
+      const response = await request(`${base}/api/v1/auth/refresh?target=frontend`, { method: 'POST', credentials: 'include' });
       if (!response.ok) {
         if (started === generation) accessToken = null;
         if (response.status === 401) throw new AuthError('로그인이 필요합니다.');
@@ -45,13 +45,13 @@ export function createAuthClient(baseUrl: string, request: typeof fetch = fetch)
       if (!response.ok) throw new Error('사용자 정보를 불러오지 못했습니다.');
       return (await response.json()).result;
     },
-    loginUrl: `${base}/api/v1/auth/login/google`,
+    loginUrl: `${base}/api/v1/auth/login/google?target=frontend`,
     async logout() {
       generation++;
       accessToken = null;
       // Wait for an in-flight refresh before clearing its newly rotated cookie.
       await refreshTask?.catch(() => undefined);
-      const response = await request(`${base}/api/v1/auth/logout`, { method: 'POST', credentials: 'include' });
+      const response = await request(`${base}/api/v1/auth/logout?target=frontend`, { method: 'POST', credentials: 'include' });
       if (!response.ok) throw new Error('로그아웃하지 못했습니다. 다시 시도해 주세요.');
     },
   };
