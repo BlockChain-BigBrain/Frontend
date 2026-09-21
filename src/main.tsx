@@ -46,12 +46,12 @@ function App() {
       <nav aria-label="주 메뉴">
         <button className="nav-item active" aria-current="page" onClick={() => setNotice('')}>Explore</button>
         <button className="nav-item" onClick={() => setNotice('음원 업로드 기능은 준비 중입니다.')}>Upload</button>
-        <button className="nav-item" onClick={() => setNotice(user ? `${user.name}님, 대시보드는 준비 중입니다.` : 'Google 로그인 후 대시보드를 이용할 수 있습니다.')}>Dashboard</button>
+        <button className="nav-item" onClick={() => setNotice(user ? `${user.nickname}님, 대시보드는 준비 중입니다.` : 'Google 로그인 후 대시보드를 이용할 수 있습니다.')}>Dashboard</button>
         <button className="nav-item" onClick={() => setNotice('Google 계정으로 시작하고, 음원과 창작 기여를 기록하세요. 유사도 검증과 자동 정산 기능은 준비 중입니다.')}>How it works</button>
       </nav>
       <div className="auth-actions" aria-busy={loading}>
         {loading ? <span className="session-status" role="status">로그인 확인 중…</span> : user ? <>
-          <span className="user-name" title={user.email}>{user.name}님</span>
+          <span className="user-name" title={user.email}>{user.nickname}님</span>
           <button className="logout" onClick={logout} disabled={loggingOut}>{loggingOut ? '로그아웃 중…' : '로그아웃'}</button>
         </> : <a className="google" href={auth.loginUrl}>
           <svg aria-hidden="true" viewBox="0 0 48 48" width="20" height="20">

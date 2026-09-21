@@ -12,7 +12,7 @@ npm run dev
 
 프론트 http://localhost:4000 / 백엔드 http://localhost:3000.
 백엔드 설정: PORT=3000, FRONTEND_URL=http://localhost:4000,
-GOOGLE_CALLBACK_URL=http://localhost:3000/api/auth/callback/google.
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/callback/google.
 Google Cloud 승인된 리디렉션 URI에도 같은 콜백 주소를 등록하세요.
 Google/JWT 비밀키는 백엔드에만 저장하세요.
 
