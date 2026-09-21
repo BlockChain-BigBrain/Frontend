@@ -10,6 +10,8 @@ const reasons: Record<string, string> = {
   AUTH_FAILED: '로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
 };
 function App() {
+  const [notice, setNotice] = useState('');
+  const [query, setQuery] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,19 +40,42 @@ function App() {
     catch (cause) { setError(cause instanceof Error ? cause.message : '로그아웃에 실패했습니다.'); }
     finally { setLoggingOut(false); }
   }
-  return <main>
-    <header><a href="/" className="brand"><span className="mark">t</span> Track AI</a><span className="tag">CREATED BY YOU</span></header>
-    <section className="layout">
-      <div className="intro"><p className="eyebrow">YOUR SOUND. YOUR RIGHTS.</p><h1>당신의 음악,<br/>당신의 권리.</h1><p className="description">음악의 시작부터 창작의 기록까지.<br/>Track AI에서 나만의 음악 여정을 시작하세요.</p><div className="wave" aria-hidden="true">{Array.from({length:29},(_,i)=><i key={i} style={{height:`${20 + Math.abs(Math.sin(i * 0.7)) * 65}px`}}/>)}</div></div>
-      <div className="card" aria-busy={loading}>
-        <p className="eyebrow">MY WORKSPACE</p>
-        <h2>{loading ? '로그인 확인 중' : user ? `${user.name}님, 반가워요` : '시작할 준비가 됐나요?'}</h2>
-        <p className="muted">{user ? 'Google 계정으로 로그인되었습니다.' : 'Google 계정으로 간편하게 시작하세요.'}</p>
-        {error && <p className="error" role="alert">{error}</p>}
-        {loading ? <p role="status" className="muted">계정 정보를 불러오고 있습니다…</p> : user ? <><div className="account"><span className="avatar">{user.name.slice(0,1)}</span><div><strong>{user.name}</strong><p>{user.email}</p></div></div><button className="secondary" onClick={logout} disabled={loggingOut}>{loggingOut ? '로그아웃 중…' : '로그아웃'}</button></> : <a className="google" href={auth.loginUrl}><span aria-hidden="true">G</span>Google로 계속하기<span aria-hidden="true">↗</span></a>}
-        <div className="divider"/><p className="footnote">당신의 다음 트랙이 시작되는 곳.</p>
+  return <>
+    <header className="topbar">
+      <a href="/" className="brand" aria-label="Track-AI 홈">Track-AI</a>
+      <nav aria-label="주 메뉴">
+        <button className="nav-item active" aria-current="page" onClick={() => setNotice('')}>Explore</button>
+        <button className="nav-item" onClick={() => setNotice('음원 업로드 기능은 준비 중입니다.')}>Upload</button>
+        <button className="nav-item" onClick={() => setNotice(user ? `${user.name}님, 대시보드는 준비 중입니다.` : 'Google 로그인 후 대시보드를 이용할 수 있습니다.')}>Dashboard</button>
+        <button className="nav-item" onClick={() => setNotice('Google 계정으로 시작하고, 음원과 창작 기여를 기록하세요. 유사도 검증과 자동 정산 기능은 준비 중입니다.')}>How it works</button>
+      </nav>
+      <div className="auth-actions" aria-busy={loading}>
+        {loading ? <span className="session-status" role="status">로그인 확인 중…</span> : user ? <>
+          <span className="user-name" title={user.email}>{user.name}님</span>
+          <button className="logout" onClick={logout} disabled={loggingOut}>{loggingOut ? '로그아웃 중…' : '로그아웃'}</button>
+        </> : <a className="google" href={auth.loginUrl}>
+          <svg aria-hidden="true" viewBox="0 0 48 48" width="20" height="20">
+            <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.9 6.1-15z"/>
+            <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.9l-6.6-5.1c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20.4 20.4 0 0 0 24 44z"/>
+            <path fill="#FBBC05" d="M12.6 27.6a12.2 12.2 0 0 1 0-7.2v-5.3H5.8a20 20 0 0 0 0 17.8z"/>
+            <path fill="#EA4335" d="M24 12c3 0 5.7 1 7.8 3.1l5.9-5.9A19.8 19.8 0 0 0 24 4 20.4 20.4 0 0 0 5.8 15.1l6.8 5.3C14.2 15.6 18.7 12 24 12z"/>
+          </svg>구글로 3초 만에 시작하기
+        </a>}
       </div>
-    </section><footer>TRACK AI <span>음악에 담긴 창작의 가치를 기록합니다.</span></footer>
-  </main>;
+    </header>
+    <main>
+      <section className="hero" aria-labelledby="hero-title">
+        <div className="network-badge"><span className="network-dot"/>Polygon Network (Amoy)<span className="badge-divider">·</span>온체인 등록 준비 중</div>
+        <h1 id="hero-title">프롬프트·보이스·편집,<br/><span>기여한 만큼 자동 정산되는 AI 음원 마켓</span></h1>
+        <p className="description">AI 유사도 검증부터 블록체인 기록, 기여자 자동 정산까지.<br className="mobile-break"/> 창작의 가치를 함께 나누는 음원 마켓을 준비하고 있습니다.</p>
+        <form className="search" role="search" onSubmit={event => { event.preventDefault(); setNotice(query.trim() ? `“${query.trim()}” 검색 기능은 준비 중입니다.` : '검색할 트랙 제목, AI 모델 또는 장르를 입력하세요.'); }}>
+          <button type="submit" aria-label="음원 검색"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+          <input aria-label="트랙 제목, AI 모델, 장르 검색" placeholder="트랙 제목, AI 모델, 장르 검색..." value={query} onChange={event => setQuery(event.target.value)}/>
+        </form>
+        {error && <p className="error" role="alert">{error}</p>}
+        {notice && <p className="notice" role="status">{notice}</p>}
+      </section>
+    </main>
+  </>;
 }
 createRoot(document.getElementById('root')!).render(<App/>);
