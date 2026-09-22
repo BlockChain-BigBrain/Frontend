@@ -1,24 +1,12 @@
 import { useState, useEffect } from "react";
+import { fetchTracks, inviteVoiceContributor, uploadTrackApi, type TrackData } from "../api";
+import logoUrl from "../assets/track-ai-logo.svg";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Screen = "marketplace" | "upload" | "detail" | "dashboard" | "checkout" | "certificate";
 type UploadStage = "idle" | "ai_checking" | "ai_pass" | "ai_fail" | "signing" | "done";
 type LicenseType = "standard" | "exclusive";
 type CheckoutStage = "summary" | "signing" | "confirmed";
-
-interface TrackData {
-  id: number;
-  title: string;
-  model: string;
-  price: string;
-  genre: string;
-  status: "verified" | "pending" | "rejected";
-  plays: string;
-  contributors: number;
-  date: string;
-  similarity?: number;
-  rejectReason?: string;
-}
 
 // ─── Badge ──────────────────────────────────────────────────────────────────────
 function Badge({ children, variant = "verified" }: {
@@ -120,12 +108,7 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
     <>
       <header className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center px-6 border-b border-[#21262d] bg-[#0d1117]/95 backdrop-blur-sm">
         <div className="flex items-center gap-2 mr-8">
-          <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 10 Q7 2 12 10" stroke="white" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
-              <circle cx="7" cy="5" r="1.5" fill="white"/>
-            </svg>
-          </div>
+          <img src={logoUrl} alt="Track-AI 로고" className="w-8 h-8 object-contain" />
           <span className="text-sm font-semibold tracking-tight text-white">Track-AI</span>
         </div>
         <nav className="flex items-center gap-1 flex-1">
@@ -140,7 +123,7 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
           </button>
         </nav>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded bg-white hover:bg-gray-100 text-gray-800 text-xs font-medium transition-colors border border-gray-200">
+          <button disabled title="인증 API 연결 필요" className="flex items-center gap-2 px-3 py-1.5 rounded bg-white/50 text-gray-500 text-xs font-medium border border-gray-200 cursor-not-allowed">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -179,8 +162,8 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
                 { name: "MetaMask", icon: "🦊", desc: "Browser Extension" },
                 { name: "WalletConnect", icon: "🔗", desc: "Mobile & Desktop" },
               ].map(w => (
-                <button key={w.name} onClick={() => { setWalletConnected(true); setShowWalletModal(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-[#1c2128] hover:bg-[#21262d] border border-[#30363d] transition-colors">
+                <button key={w.name} disabled title="지갑 API 연결 필요"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-[#1c2128] border border-[#30363d] opacity-60 cursor-not-allowed">
                   <span className="text-xl">{w.icon}</span>
                   <div className="text-left">
                     <div className="text-sm font-medium text-white">{w.name}</div>
@@ -195,16 +178,6 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
     </>
   );
 }
-
-// ─── Track Data ─────────────────────────────────────────────────────────────────
-const tracks: TrackData[] = [
-  { id: 1, title: "Neon Cascade", model: "Suno v4.5", price: "50 POL", genre: "Electronic", status: "verified", plays: "2.4k", contributors: 2, date: "2025-11-03" },
-  { id: 2, title: "Ambient Drift 01", model: "Udio v2", price: "30 POL", genre: "Ambient", status: "verified", plays: "1.8k", contributors: 1, date: "2025-10-14" },
-  { id: 3, title: "Lo-Fi Morning", model: "Suno v4.5", price: "80 POL", genre: "Lo-Fi", status: "verified", plays: "5.1k", contributors: 2, date: "2025-09-22" },
-  { id: 4, title: "Synthetic Pulse", model: "Stable Audio 2.0", price: "60 POL", genre: "Techno", status: "pending", plays: "—", contributors: 1, date: "2026-01-05" },
-  { id: 5, title: "Void Echoes", model: "Udio v2", price: "40 POL", genre: "Dark Ambient", status: "verified", plays: "920", contributors: 3, date: "2025-12-08" },
-  { id: 6, title: "Solar Wind", model: "Suno v4.5", price: "120 POL", genre: "Cinematic", status: "rejected", plays: "—", contributors: 2, date: "2026-01-11", similarity: 91, rejectReason: "'Orion Drift'와 근사 복제 의심" },
-];
 
 // ─── Track Card ─────────────────────────────────────────────────────────────────
 function TrackCard({ track, onClick, onBuy }: { track: TrackData; onClick: () => void; onBuy: () => void }) {
@@ -274,9 +247,20 @@ function TrackCard({ track, onClick, onBuy }: { track: TrackData; onClick: () =>
 
 // ─── Marketplace ────────────────────────────────────────────────────────────────
 function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [tracks, setTracks] = useState<TrackData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const genres = ["All", "Electronic", "Ambient", "Lo-Fi", "Cinematic", "Techno", "Dark Ambient"];
+
+  useEffect(() => {
+    fetchTracks()
+      .then(setTracks)
+      .catch(error => setError(error instanceof Error ? error.message : "트랙을 불러오지 못했습니다."))
+      .finally(() => setLoading(false));
+  }, []);
+
   const filtered = tracks.filter(t =>
     (filter === "All" || t.genre === filter) &&
     (search === "" || t.title.toLowerCase().includes(search.toLowerCase()))
@@ -308,11 +292,9 @@ function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       </div>
       <div className="border-b border-[#21262d] bg-[#0d1117]">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-6 text-xs font-mono text-[#9CA3AF]">
-          {[["Total Volume", "842,400 POL"], ["트랙 등록", "1,247"], ["검증 통과율", "94.2%"], ["활성 크리에이터", "386명"]].map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2"><span>{k}</span><span className="text-white font-semibold">{v}</span></div>
-          ))}
-        </div>
+          <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-6 text-xs font-mono text-[#9CA3AF]">
+            <span>시장 통계 API 연결 필요</span>
+          </div>
       </div>
       <div className="max-w-6xl mx-auto px-6 py-6">
         <div className="flex items-center gap-2 mb-6">
@@ -323,11 +305,16 @@ function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-4">
-          {filtered.map(track => (
-            <TrackCard key={track.id} track={track} onClick={() => setScreen("detail")} onBuy={() => setScreen("checkout")} />
-          ))}
-        </div>
+        {loading && <p className="py-16 text-center text-sm text-[#9CA3AF]">트랙을 불러오는 중...</p>}
+        {!loading && error && <p className="py-16 text-center text-sm text-red-400">{error}</p>}
+        {!loading && !error && filtered.length === 0 && <p className="py-16 text-center text-sm text-[#9CA3AF]">등록된 트랙이 없습니다.</p>}
+        {!loading && !error && filtered.length > 0 && (
+          <div className="grid grid-cols-3 gap-4">
+            {filtered.map(track => (
+              <TrackCard key={track.id} track={track} onClick={() => setScreen("detail")} onBuy={() => setScreen("checkout")} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -531,42 +518,72 @@ function UploadScreen() {
   const [stage, setStage] = useState<UploadStage>("idle");
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState("");
   const [prompt, setPrompt] = useState("Pulsing neon synth with driving 4/4 beat, hypnotic arpeggios, and late-night Tokyo cityscape vibes for a commercial trailer");
   const [platform, setPlatform] = useState("Suno v4.5");
   const [promptWeight, setPromptWeight] = useState(70);
   const [voiceWeight, setVoiceWeight] = useState(20);
   const [voiceAddress, setVoiceAddress] = useState("");
   const [voiceInvited, setVoiceInvited] = useState(false);
-  const [voiceSigned, setVoiceSigned] = useState(false);
-  const [projectFile, setProjectFile] = useState("");
-  const [failDemo, setFailDemo] = useState(false);
-
+  const [voiceInviteLoading, setVoiceInviteLoading] = useState(false);
+  const [voiceInviteError, setVoiceInviteError] = useState("");
+  const [projectFile, setProjectFile] = useState<File | null>(null);
   const editWeight = 100 - promptWeight - voiceWeight;
 
-  const handleInvite = () => {
-    setVoiceInvited(true);
-    setTimeout(() => setVoiceSigned(true), 4000);
+  const selectFile = (file: File | undefined) => {
+    if (!file) return;
+    setSelectedFile(file);
+    setFileName(file.name);
+    setUploadError("");
   };
 
-  const handleAIDone = (result: "pass" | "fail") => setStage(result === "pass" ? "ai_pass" : "ai_fail");
+  const handleInvite = async () => {
+    if (!voiceAddress) return;
+    setVoiceInviteLoading(true);
+    setVoiceInviteError("");
+    try {
+      await inviteVoiceContributor(voiceAddress);
+      setVoiceInvited(true);
+    } catch (error) {
+      setVoiceInviteError(error instanceof Error ? error.message : "초대에 실패했습니다.");
+    } finally {
+      setVoiceInviteLoading(false);
+    }
+  };
 
-  const handleSign = () => {
+  const handleUpload = async () => {
+    if (!selectedFile) return;
+    setUploadError("");
     setStage("signing");
-    setTimeout(() => setStage("done"), 2200);
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("prompt", prompt);
+    formData.append("platform", platform);
+    formData.append("promptWeight", String(promptWeight));
+    formData.append("voiceWeight", String(voiceWeight));
+    formData.append("voiceAddress", voiceAddress);
+    if (projectFile) formData.append("projectFile", projectFile);
+
+    try {
+      await uploadTrackApi(formData);
+      setStage("done");
+    } catch (error) {
+      setStage("idle");
+      setUploadError(error instanceof Error ? error.message : "업로드에 실패했습니다.");
+    }
   };
 
   const handleReset = () => {
     setStage("idle");
     setFileName("");
+    setSelectedFile(null);
+    setUploadError("");
     setVoiceInvited(false);
-    setVoiceSigned(false);
     setVoiceAddress("");
-    setFailDemo(false);
+    setVoiceInviteError("");
+    setProjectFile(null);
   };
-
-  if (stage === "ai_checking") return <AICheckingView fileName={fileName} failMode={failDemo} onDone={handleAIDone} />;
-  if (stage === "ai_pass") return <AIPassView onSign={handleSign} onReset={() => setStage("idle")} />;
-  if (stage === "ai_fail") return <AIFailView onReset={handleReset} />;
 
   return (
     <div className="pt-14 min-h-screen">
@@ -591,9 +608,10 @@ function UploadScreen() {
         <div className="space-y-4">
           {/* Drop zone */}
           <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
-            onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) setFileName(f.name); }}
+            onDrop={e => { e.preventDefault(); setDragging(false); selectFile(e.dataTransfer.files[0]); }}
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${dragging ? "border-blue-500 bg-blue-500/5" : fileName ? "border-emerald-500/40 bg-emerald-500/5" : "border-[#30363d] hover:border-[#484f58]"}`}
-            onClick={() => !fileName && setFileName("neon_cascade_v3.wav")}>
+            onClick={() => document.getElementById("track-file")?.click()}>
+            <input id="track-file" type="file" accept="audio/wav,audio/mpeg,audio/*" className="hidden" onChange={e => selectFile(e.target.files?.[0])} />
             {fileName ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
@@ -604,7 +622,7 @@ function UploadScreen() {
                   <div className="text-xs text-[#9CA3AF] font-mono mt-0.5">44.1kHz · 16-bit · WAV · 4.2MB · 3:42</div>
                 </div>
                 <Waveform seed={42} color="#10b981" />
-                <button onClick={e => { e.stopPropagation(); setFileName(""); }} className="text-xs text-[#9CA3AF] hover:text-white underline">파일 제거</button>
+                <button onClick={e => { e.stopPropagation(); setFileName(""); setSelectedFile(null); }} className="text-xs text-[#9CA3AF] hover:text-white underline">파일 제거</button>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
@@ -678,16 +696,13 @@ function UploadScreen() {
               <div className="flex gap-2">
                 <input value={voiceAddress} onChange={e => setVoiceAddress(e.target.value)} placeholder="0x... 또는 이메일 주소"
                   className="flex-1 px-3 py-2 rounded-lg bg-[#1c2128] border border-[#30363d] text-sm text-white placeholder-[#9CA3AF] focus:outline-none focus:border-blue-500 font-mono text-xs transition-colors" />
-                <button onClick={handleInvite} disabled={!voiceAddress || voiceInvited}
+                <button onClick={handleInvite} disabled={!voiceAddress || voiceInvited || voiceInviteLoading}
                   className="px-3 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                  합의 서명 초대
+                  {voiceInviteLoading ? "초대 중..." : voiceInvited ? "초대 전송됨" : "합의 서명 초대"}
                 </button>
               </div>
-              {voiceInvited && (
-                <div className={`mt-2 flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg border transition-all ${voiceSigned ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-amber-500/5 border-amber-500/20 text-amber-400"}`}>
-                  {voiceSigned ? "✓ 서명 완료 — 보이스 제공자가 기여도에 동의했습니다" : "⏳ 서명 대기 중 — 상대방의 합의 서명을 기다리고 있습니다"}
-                </div>
-              )}
+              {voiceInvited && <div className="mt-2 text-xs font-mono text-emerald-400">✓ 초대가 전송되었습니다. 상대방의 서명 상태는 서버에서 확인됩니다.</div>}
+              {voiceInviteError && <div className="mt-2 text-xs font-mono text-red-400">{voiceInviteError}</div>}
             </div>
 
             {/* Smart contract deploy notice */}
@@ -699,12 +714,13 @@ function UploadScreen() {
             <div>
               <label className="block text-xs font-medium text-[#9CA3AF] mb-1.5">프로젝트 파일 <span className="text-[#9CA3AF] font-normal">(선택) — DAW 세션, 작업 로그</span></label>
               <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border border-dashed cursor-pointer transition-colors ${projectFile ? "border-emerald-500/30 bg-emerald-500/5" : "border-[#30363d] hover:border-[#484f58]"}`}
-                onClick={() => !projectFile && setProjectFile("neon_cascade_project.als")}>
+                onClick={() => document.getElementById("project-file")?.click()}>
+                <input id="project-file" type="file" accept=".als,.flp,.logic,.zip" className="hidden" onChange={e => setProjectFile(e.target.files?.[0] ?? null)} />
                 {projectFile ? (
                   <>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="#10b981" strokeWidth="1.2"/><path d="M4 5h6M4 7.5h4" stroke="#10b981" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                    <span className="text-xs font-mono text-emerald-400 flex-1">{projectFile}</span>
-                    <button onClick={e => { e.stopPropagation(); setProjectFile(""); }} className="text-[10px] text-[#9CA3AF] hover:text-white">제거</button>
+                    <span className="text-xs font-mono text-emerald-400 flex-1">{projectFile.name}</span>
+                    <button onClick={e => { e.stopPropagation(); setProjectFile(null); }} className="text-[10px] text-[#9CA3AF] hover:text-white">제거</button>
                   </>
                 ) : (
                   <>
@@ -716,18 +732,10 @@ function UploadScreen() {
             </div>
           </div>
 
-          {/* Fail demo toggle */}
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#f59e0b" strokeWidth="1.2"/><path d="M7 4v3.5M7 9.5v.5" stroke="#f59e0b" strokeWidth="1.4" strokeLinecap="round"/></svg>
-            <span className="text-xs text-amber-400 flex-1">데모 시뮬레이션: 표절 케이스 보기</span>
-            <button onClick={() => setFailDemo(!failDemo)} className={`relative w-9 h-5 rounded-full transition-colors ${failDemo ? "bg-red-500" : "bg-[#30363d]"}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${failDemo ? "left-4" : "left-0.5"}`}></div>
-            </button>
-          </div>
-
-          <button onClick={() => setStage("ai_checking")} disabled={!fileName}
+          {uploadError && <p className="text-sm text-red-400">{uploadError}</p>}
+          <button onClick={handleUpload} disabled={!selectedFile || stage === "signing"}
             className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors">
-            {failDemo ? "AI 검증 시작 (표절 케이스 시뮬레이션)" : "AI 검증 후 온체인 Mint"}
+            {stage === "signing" ? "업로드 및 검증 처리 중..." : "AI 검증 후 온체인 Mint"}
           </button>
         </div>
       </div>
@@ -1024,53 +1032,23 @@ function DetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────────
-const initialTxns = [
-  { date: "2025-12-28", track: "Neon Cascade", buyer: "0x9f2a...b3c1", license: "Standard", role: "creator", split: "70%", earned: "35 POL", status: "settled" },
-  { date: "2025-12-15", track: "Void Echoes", buyer: "0x7f2c...a3d1", license: "Standard", role: "voice", split: "20%", earned: "10 POL", status: "frozen" },
-  { date: "2025-12-10", track: "Ambient Drift 01", buyer: "0x1d4e...7f9a", license: "Exclusive", role: "creator", split: "70%", earned: "245 POL", status: "settled" },
-  { date: "2025-11-28", track: "Neon Cascade", buyer: "0x5c7b...2e4d", license: "Standard", role: "creator", split: "70%", earned: "35 POL", status: "settled" },
-  { date: "2025-11-15", track: "Solar Wind", buyer: "0x3a8f...d1e2", license: "Standard", role: "voice", split: "20%", earned: "24 POL", status: "settled" },
-  { date: "2025-10-30", track: "Lo-Fi Morning", buyer: "0x6e1c...9b5f", license: "Exclusive", role: "creator", split: "70%", earned: "245 POL", status: "settled" },
-];
-
-const myTracks = [
-  { title: "Neon Cascade", status: "verified", genre: "Electronic", model: "Suno v4.5", date: "2025-11-03", earnings: "175 POL" },
-  { title: "Ambient Drift 01", status: "verified", genre: "Ambient", model: "Udio v2", date: "2025-10-14", earnings: "245 POL" },
-  { title: "Lo-Fi Morning", status: "verified", genre: "Lo-Fi", model: "Suno v4.5", date: "2025-09-22", earnings: "245 POL" },
-  { title: "Void Echoes", status: "verified", genre: "Dark Ambient", model: "Udio v2", date: "2025-12-08", earnings: "10 POL" },
-  { title: "Solar Wind", status: "verified", genre: "Cinematic", model: "Suno v4.5", date: "2025-11-20", earnings: "84 POL" },
-  { title: "Synthetic Pulse", status: "pending", genre: "Techno", model: "Stable Audio 2.0", date: "2026-01-05", earnings: "—" },
-  { title: "Orion Drift", status: "rejected", genre: "Electronic", model: "Suno v4.5", date: "2026-01-11", earnings: "—" },
-];
-
 function DashboardScreen() {
-  const [totalEarned, setTotalEarned] = useState(594);
-  const [txns, setTxns] = useState(initialTxns);
-  const [animated, setAnimated] = useState(false);
-  const [justBought, setJustBought] = useState(false);
+  const [tracks, setTracks] = useState<TrackData[]>([]);
+  const [error, setError] = useState("");
   const [trackTab, setTrackTab] = useState<"all" | "verified" | "pending" | "rejected">("all");
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setTotalEarned(prev => prev + 35);
-      setTxns(prev => [
-        { date: "2026-01-13", track: "Neon Cascade", buyer: "0x2b9e...f1a4", license: "Standard", role: "creator", split: "70%", earned: "35 POL", status: "settled" },
-        ...prev,
-      ]);
-      setAnimated(true); setJustBought(true);
-      setTimeout(() => setAnimated(false), 600);
-    }, 1500);
-    return () => clearTimeout(t);
+    fetchTracks().then(setTracks).catch(error => setError(error instanceof Error ? error.message : "트랙을 불러오지 못했습니다."));
   }, []);
 
   const stats = [
-    { label: "총 누적 수익", value: `${totalEarned} POL`, sub: `≈ $${(totalEarned * 0.87).toFixed(0)} USD`, delta: "+35 POL", up: true, animate: animated },
-    { label: "이번 달 거래", value: "14건", sub: "전월 대비 +3건", delta: "+27%", up: true, animate: false },
-    { label: "등록된 음원", value: "7개", sub: "Active 5 · Pending 1 · Rejected 1", delta: "", up: false, animate: false },
-    { label: "평균 유사도", value: "11.3%", sub: "최근 30일 기준", delta: "안전 구간", up: false, animate: false },
+    { label: "총 누적 수익", value: "-", sub: "거래 API 연결 필요", delta: "", up: false, animate: false },
+    { label: "이번 달 거래", value: "-", sub: "거래 API 연결 필요", delta: "", up: false, animate: false },
+    { label: "등록된 음원", value: `${tracks.length}개`, sub: "API 응답 기준", delta: "", up: false, animate: false },
+    { label: "평균 유사도", value: "-", sub: "검증 결과 API 연결 필요", delta: "", up: false, animate: false },
   ];
 
-  const filteredTracks = trackTab === "all" ? myTracks : myTracks.filter(t => t.status === trackTab);
+  const filteredTracks = trackTab === "all" ? tracks : tracks.filter(t => t.status === trackTab);
 
   return (
     <div className="pt-14 min-h-screen">
@@ -1081,11 +1059,10 @@ function DashboardScreen() {
             <div className="flex items-center gap-2 text-xs text-[#9CA3AF] font-mono">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
               실시간 정산 · 스마트 컨트랙트 자동 실행
-              {justBought && <span className="text-emerald-400 ml-2">· 새 거래 확인됨</span>}
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs font-mono text-[#9CA3AF] bg-[#161b22] border border-[#21262d] px-3 py-1.5 rounded-lg">
-            <span>지갑</span><span className="text-white">0x3a7f...c4d2</span>
+            <span>지갑</span><span className="text-white">연결 필요</span>
           </div>
         </div>
 
@@ -1108,18 +1085,11 @@ function DashboardScreen() {
               <h3 className="text-sm font-semibold text-white">월별 수익</h3>
               <Badge variant="muted">최근 6개월</Badge>
             </div>
-            <div className="flex items-end gap-2 h-28">
-              {[0.12, 0.08, 0.19, 0.24, 0.15, 0.35].map((v, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                  <div className="w-full rounded-t" style={{ height: `${v * 280}px`, background: i === 5 ? "#2f80ed" : "#21262d" }}></div>
-                  <span className="text-xs font-mono text-[#9CA3AF]">{["8월", "9월", "10월", "11월", "12월", "1월"][i]}</span>
-                </div>
-              ))}
-            </div>
+            <div className="h-28 flex items-center justify-center text-sm text-[#9CA3AF]">수익 데이터 API 연결 필요</div>
           </div>
           <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white mb-3">라이선스 유형</h3>
-            <PieChart slices={[{ label: "Standard BGM", value: 68, color: "#2f80ed" }, { label: "Exclusive", value: 32, color: "#7c3aed" }]} />
+            <div className="h-28 flex items-center justify-center text-sm text-[#9CA3AF]">라이선스 데이터 API 연결 필요</div>
           </div>
         </div>
 
@@ -1137,8 +1107,10 @@ function DashboardScreen() {
             </div>
           </div>
           <div className="divide-y divide-[#21262d]">
-            {filteredTracks.map((t, i) => (
-              <div key={i} className="flex items-center px-5 py-3 hover:bg-[#1c2128] transition-colors">
+            {error && <div className="px-5 py-6 text-sm text-red-400">{error}</div>}
+            {!error && filteredTracks.length === 0 && <div className="px-5 py-6 text-sm text-[#9CA3AF]">등록된 음원이 없습니다.</div>}
+            {!error && filteredTracks.map(t => (
+              <div key={t.id} className="flex items-center px-5 py-3 hover:bg-[#1c2128] transition-colors">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-white">{t.title}</span>
@@ -1150,48 +1122,14 @@ function DashboardScreen() {
                     <span>{t.genre}</span><span>·</span><span>{t.model}</span><span>·</span><span>{t.date}</span>
                   </div>
                 </div>
-                <div className="text-sm font-mono font-semibold text-emerald-400">{t.earnings}</div>
+                <div className="text-sm font-mono text-[#9CA3AF]">{t.price}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Transactions */}
-        <div className="bg-[#161b22] border border-[#21262d] rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[#21262d]">
-            <h3 className="text-sm font-semibold text-white">트랜잭션 히스토리</h3>
-            <span className="text-xs text-[#9CA3AF] font-mono">{txns.length}건</span>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#21262d]">
-                {["날짜", "음원명", "구매자 지갑", "라이선스", "내 역할", "지분", "정산 금액"].map(h => (
-                  <th key={h} className="text-left px-5 py-3 text-xs font-medium text-[#9CA3AF] uppercase tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {txns.map((tx, i) => (
-                <tr key={i} className={`border-b border-[#21262d] last:border-0 transition-colors ${tx.status === "frozen" ? "bg-amber-500/5" : i === 0 && justBought ? "bg-emerald-500/5" : "hover:bg-[#1c2128]"}`}>
-                  <td className="px-5 py-3 text-xs font-mono text-[#9CA3AF]">{tx.date}</td>
-                  <td className="px-5 py-3 text-xs text-white font-medium">{tx.track}</td>
-                  <td className="px-5 py-3 text-xs font-mono text-blue-400">{tx.buyer}</td>
-                  <td className="px-5 py-3"><Badge variant={tx.license === "Exclusive" ? "primary" : "muted"}>{tx.license}</Badge></td>
-                  <td className="px-5 py-3">
-                    <span className={`text-xs font-mono ${tx.role === "voice" ? "text-purple-400" : "text-[#9CA3AF]"}`}>
-                      {tx.role === "voice" ? "보이스" : "크리에이터"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-xs font-mono text-[#9CA3AF]">{tx.split}</td>
-                  <td className="px-5 py-3">
-                    {tx.status === "frozen"
-                      ? <span className="text-xs font-mono font-semibold text-amber-400">⏸ {tx.earned} 동결</span>
-                      : <span className="text-xs font-mono font-semibold text-emerald-400">{i === 0 && justBought ? "↑ " : ""}{tx.earned}</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 text-sm text-[#9CA3AF]">
+          거래 내역 API가 연결되면 이 영역에 표시됩니다.
         </div>
       </div>
     </div>
@@ -1205,7 +1143,7 @@ function CheckoutScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [paymentMethod, setPaymentMethod] = useState<"google" | "metamask">("google");
   const prices = { standard: { pol: "50 POL", usd: "$43.50" }, exclusive: { pol: "350 POL", usd: "$304.50" } };
 
-  const handleConfirm = () => { setStage("signing"); setTimeout(() => setStage("confirmed"), 2200); };
+  const handleConfirm = () => setStage("signing");
 
   return (
     <div className="pt-14 min-h-screen flex items-start justify-center">
