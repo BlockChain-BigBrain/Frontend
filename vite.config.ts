@@ -13,10 +13,17 @@ export default defineConfig(({ mode }) => {
   return {
     base: '/Frontend/',
     build: {
+      outDir: emitSourcemaps ? 'dist' : 'docs',
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
     },
     plugins: [
+      {
+        name: 'github-pages-nojekyll',
+        generateBundle() {
+          this.emitFile({ type: 'asset', fileName: '.nojekyll', source: '' })
+        },
+      },
       react(),
       tailwindcss(),
       figmaSiteConfiguration(siteConfiguration),

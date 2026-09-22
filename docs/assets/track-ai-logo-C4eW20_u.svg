@@ -1,0 +1,24 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="disc" cx="30%" cy="20%" r="85%">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="0.55" stop-color="#172B72"/>
+      <stop offset="1" stop-color="#351A9B"/>
+    </radialGradient>
+    <linearGradient id="orbit" x1="4" y1="44" x2="60" y2="18" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#73C8FF"/>
+      <stop offset="0.52" stop-color="#EEDCFF"/>
+      <stop offset="1" stop-color="#6BCBFF"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="15" y1="8" x2="50" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A9D9FF"/>
+      <stop offset="1" stop-color="#8D6CFF"/>
+    </linearGradient>
+  </defs>
+  <circle cx="31" cy="32" r="20" fill="url(#disc)"/>
+  <path d="M11 39C3 46 8 55 23 55C40 55 56 45 59 35C61 28 55 25 50 25" stroke="url(#orbit)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M19 22C22 17 26 14 31 13M17 28C19 23 23 20 27 18M42 40C43 36 44 33 44 30M39 46C44 44 47 40 48 36" stroke="url(#shine)" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+  <circle cx="31" cy="32" r="7" fill="url(#shine)"/>
+  <circle cx="31" cy="32" r="2" fill="#29258C"/>
+  <path d="M52 8L53.6 12.4L58 14L53.6 15.6L52 20L50.4 15.6L46 14L50.4 12.4L52 8Z" fill="#739BFF"/>
+</svg>

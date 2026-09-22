@@ -3,6 +3,7 @@ dist/
 .env
 .env.local
 .env*
+!.env.example
 .DS_Store
 build/
 .cache/
@@ -17,3 +18,7 @@ logs/
 /.figma/design-context/
 /.plugins/
 /.opencode-skills/
+
+# Commit GitHub Pages production output.
+!/docs/
+!/docs/**
