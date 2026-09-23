@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { fetchTracks, inviteVoiceContributor, uploadTrackApi, type TrackData } from "../api";
+import { auth, fetchTracks, inviteVoiceContributor, uploadTrackApi, type TrackData } from "../api";
 import logoUrl from "../assets/track-ai-logo.svg";
-import { AuthError, createAuthClient, type User } from "../auth";
+import { AuthError, type User } from "../auth";
 
-const auth = createAuthClient(import.meta.env.VITE_API_BASE_URL || "http://localhost:3000");
+
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Screen = "marketplace" | "upload" | "detail" | "dashboard" | "checkout" | "certificate";
@@ -568,13 +568,15 @@ function UploadScreen() {
     setUploadError("");
     setStage("signing");
     const formData = new FormData();
-    formData.append("file", selectedFile);
+    formData.append("audio", selectedFile);
+    formData.append("title", selectedFile.name.replace(/\.[^.]+$/, "") || selectedFile.name);
     formData.append("prompt", prompt);
-    formData.append("platform", platform);
-    formData.append("promptWeight", String(promptWeight));
-    formData.append("voiceWeight", String(voiceWeight));
-    formData.append("voiceAddress", voiceAddress);
-    if (projectFile) formData.append("projectFile", projectFile);
+    formData.append("workLog", JSON.stringify({ platform, promptWeight, voiceWeight, editWeight, voiceAddress }));
+    if (projectFile) {
+      setStage("idle");
+      setUploadError("프로젝트 파일 첨부는 아직 지원하지 않습니다. 첨부를 해제하고 음원만 업로드해 주세요.");
+      return;
+    }
 
     try {
       await uploadTrackApi(formData);
@@ -1526,16 +1528,22 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("marketplace");
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
   const [walletConnected, setWalletConnected] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
 
   useEffect(() => {
     let active = true;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("reason")) setAuthError("Google 로그인에 실패했거나 취소되었습니다. 다시 시도해 주세요.");
+    const returnedFromLogin = params.get("login") === "success";
+    params.delete("login"); params.delete("reason");
+    window.history.replaceState(null, "", window.location.pathname + (params.size ? `?${params}` : "") + window.location.hash);
     auth.me().then(value => {
       if (active) setUser(value);
     }).catch(error => {
-      if (active && !(error instanceof AuthError)) console.error(error);
+      if (active && (!(error instanceof AuthError) || returnedFromLogin)) setAuthError("로그인 상태를 확인하지 못했습니다. 다시 로그인해 주세요. 브라우저에서 타사 쿠키를 차단하면 로그인이 유지되지 않을 수 있습니다.");
     }).finally(() => {
       if (active) setAuthLoading(false);
     });
@@ -1556,6 +1564,7 @@ export default function App() {
         showHowItWorks={showHowItWorks} setShowHowItWorks={setShowHowItWorks}
         user={user} authLoading={authLoading} onLogout={handleLogout}
       />
+      {authError && <p role="alert" className="pt-20 px-6 text-red-400">{authError}</p>}
       {screen === "marketplace" && <MarketplaceScreen setScreen={setScreen} />}
       {screen === "upload" && <UploadScreen />}
       {screen === "detail" && <DetailScreen setScreen={setScreen} />}

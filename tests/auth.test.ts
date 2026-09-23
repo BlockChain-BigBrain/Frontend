@@ -35,3 +35,28 @@ test('first visit stays signed out when only a Swagger session exists', async ()
  assert.equal(calls.length,1);
  assert.equal(client.loginUrl,'http://localhost:3000/api/v1/auth/login/google?target=frontend');
 });
+
+test('multipart upload preserves audio and title with Bearer authentication', async () => {
+ const form = new FormData();
+ form.append('audio', new Blob(['audio'], {type:'audio/mpeg'}), 'song.mp3');
+ form.append('title', 'song');
+ const client = createAuthClient('https://api.example.test', async (url, init) => {
+  if (String(url).includes('/refresh?')) return json({result:{accessToken:'access'}});
+  assert.equal(String(url), 'https://api.example.test/api/tracks');
+  assert.equal(init?.method, 'POST');
+  assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer access');
+  assert.equal(new Headers(init?.headers).has('Content-Type'), false);
+  assert.equal(init?.body, form);
+  assert.equal(form.get('title'), 'song');
+  assert.ok(form.get('audio') instanceof Blob);
+  return json({id:1}, 201);
+ });
+ assert.equal((await client.apiFetch('/api/tracks', {method:'POST', body:form})).status, 201);
+});
+
+test('Google login carries the GitHub Pages return path', () => {
+ const client = createAuthClient('https://api.example.test', fetch, '/Frontend/?login=success');
+ const url = new URL(client.loginUrl);
+ assert.equal(url.searchParams.get('redirectTo'), '/Frontend/?login=success');
+ assert.equal(url.searchParams.get('target'), 'frontend');
+});

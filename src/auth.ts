@@ -1,6 +1,6 @@
 export type User = { id: number; email: string; nickname: string };
 export class AuthError extends Error {}
-export function createAuthClient(baseUrl: string, request: typeof fetch = fetch) {
+export function createAuthClient(baseUrl: string, request: typeof fetch = fetch, redirectTo?: string) {
   const base = baseUrl.replace(/\/$/, '');
   let accessToken: string | null = null;
   let refreshTask: Promise<void> | null = null;
@@ -45,7 +45,7 @@ export function createAuthClient(baseUrl: string, request: typeof fetch = fetch)
       if (!response.ok) throw new Error('사용자 정보를 불러오지 못했습니다.');
       return (await response.json()).result;
     },
-    loginUrl: `${base}/api/v1/auth/login/google?target=frontend`,
+    loginUrl: `${base}/api/v1/auth/login/google?target=frontend${redirectTo ? `&redirectTo=${encodeURIComponent(redirectTo)}` : ""}`,
     async logout() {
       generation++;
       accessToken = null;

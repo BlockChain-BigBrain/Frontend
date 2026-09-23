@@ -1,4 +1,8 @@
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+import { createAuthClient } from "../auth";
+
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+
+export const auth = createAuthClient(BASE_URL, fetch, `${import.meta.env.BASE_URL}?login=success`);
 
 export interface TrackData {
   id: number;
@@ -23,7 +27,7 @@ export async function fetchTracks(): Promise<TrackData[]> {
 }
 
 export async function uploadTrackApi(formData: FormData) {
-  const response = await fetch(`${BASE_URL}/api/tracks`, {
+  const response = await auth.apiFetch("/api/tracks", {
     method: "POST",
     body: formData,
   });
