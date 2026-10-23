@@ -3,7 +3,7 @@ export { sendTransaction } from "../wallet"
 export type { ChainTransaction } from "../wallet"
 import { auth } from "./index"
 export const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"
+  import.meta.env?.VITE_API_BASE_URL || "http://localhost:4000"
 ).replace(/\/$/, "")
 export class ApiError extends Error {
   constructor(

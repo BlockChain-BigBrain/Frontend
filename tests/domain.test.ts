@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {creatorRows,trackView} from '../src/domain.ts';
+test('role shares preserve integer percentages and aggregate to 100 with distinct contributor IDs',()=>{const rows=creatorRows(1,70,30,'2');assert.deepEqual(rows,[{userId:1,role:'PROMPT',percentage:70},{userId:2,role:'VOCAL',percentage:30}]);assert.equal(creatorRows(1,70,0,'').reduce((n,x)=>n+x.percentage,0),100);for(const args of [[1,70,30,''],[1,70.5,0,''],[1,80,30,'2']] as const)assert.throws(()=>creatorRows(...args));});
+test('evaluated AI HOLD overrides the lower fixed contract zone in the view',()=>{const v=trackView({id:42,title:'Hold',verifications:[{status:'VERIFIED',riskStatus:'WARN',riskScore:'.895',evidence:{decision:'HOLD',similarityScore:.895,reviewRequired:true}}]});assert.equal(v.status,'hold');assert.equal(v.similarity,89.5);assert.ok(v.note);});
+test('unknown market metadata is not fabricated and zero similarity remains a real zero',()=>{const v=trackView({id:1,title:'Zero',verification:{riskStatus:'PASS',riskScore:0}});assert.equal(v.status,'pass');assert.equal(v.similarity,0);assert.equal(v.contributors,null);assert.equal(v.price,'미판매');});
+test('fingerprint duplicate cannot show a similarity measurement or a PASS badge',()=>{const v=trackView({id:1,title:'Duplicate',verifications:[{duplicate:true,riskScore:1,evidence:{decision:'BLOCK',similarityScore:null}}]});assert.equal(v.status,'hold');assert.equal(v.similarity,undefined);});
