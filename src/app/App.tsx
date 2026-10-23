@@ -1,15 +1,19 @@
 import { useState, useEffect } from "react";
-import { auth, fetchTracks, inviteVoiceContributor, uploadTrackApi, type TrackData } from "../api";
-import logoUrl from "../assets/track-ai-logo.svg";
+import { auth, fetchTracks, inviteVoiceContributor, uploadTrackApi, type TrackData as ApiTrack } from "../api";
 import { AuthError, type User } from "../auth";
-
-
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Screen = "marketplace" | "upload" | "detail" | "dashboard" | "checkout" | "certificate";
 type UploadStage = "idle" | "ai_checking" | "ai_pass" | "ai_fail" | "signing" | "done";
 type LicenseType = "standard" | "exclusive";
 type CheckoutStage = "summary" | "signing" | "confirmed";
+
+type TrackData = Omit<ApiTrack, "status"> & { status: "pass" | "warn" | "hold" | "checking"; note?: string };
+
+function toDesignTrack(track: ApiTrack): TrackData {
+  const status = track.status === "verified" ? "pass" : track.status === "pending" ? "checking" : "hold";
+  return { ...track, status, similarity: track.similarity ?? 0, note: track.rejectReason };
+}
 
 // ─── Badge ──────────────────────────────────────────────────────────────────────
 function Badge({ children, variant = "verified" }: {
@@ -64,9 +68,9 @@ function HowItWorksModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="space-y-4">
           {[
-            { num: "01", title: "AI 유사도 검증", desc: "LAION-CLAP 모델로 512-dim 오디오 임베딩을 추출하고, 등록 음원 벡터 DB(온체인 CID 앵커)와 코사인 유사도를 비교합니다. 85% 초과 시 표절 판정 → 등록 차단.", icon: "🔍", color: "#2f80ed" },
-            { num: "02", title: "온체인 Mint", desc: "검증 통과 시 창작 이력(프롬프트·기여도·검증 해시)이 IPFS에 저장되고, ERC-1155 NFT로 Polygon Amoy 테스트넷에 영구 기록됩니다.", icon: "⛓", color: "#7c3aed" },
-            { num: "03", title: "스마트 컨트랙트 거래", desc: "구매 즉시 에스크로 컨트랙트가 수익을 프롬프트 엔지니어·보이스 제공자·플랫폼에 자동 분배합니다. 분쟁 발생 시 14일 동결 후 운영자 심사.", icon: "⚡", color: "#10b981" },
+            { num: "01", title: "AI 유사도 검증", desc: "Audio Fingerprint로 동일 파일을 먼저 검사하고, LAION-CLAP 512-dim 임베딩으로 등록 음원과의 음향 유사도를 비교합니다.", icon: "01", color: "#2f80ed" },
+            { num: "02", title: "온체인 기록", desc: "검증 결과와 창작 이력 해시를 IPFS에 저장하고 ERC-1155로 Polygon Amoy에 기록합니다.", icon: "02", color: "#7c3aed" },
+            { num: "03", title: "라이선스·자동 정산", desc: "구매자에게 상업 이용 라이선스 영수증을 발급하고, 합의·서명한 비율대로 수익을 자동 분배합니다.", icon: "03", color: "#10b981" },
           ].map((s, i, arr) => (
             <div key={s.num} className="flex gap-4">
               <div className="flex flex-col items-center gap-1 flex-shrink-0">
@@ -82,6 +86,14 @@ function HowItWorksModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           ))}
+        </div>
+        <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <div className="text-xs font-semibold text-amber-400 mb-2">한계와 안내</div>
+          <ul className="space-y-1 text-xs text-[#9CA3AF] list-disc pl-4">
+            <li>유사도는 음향적 비교이며 법적 표절 판단이 아닙니다.</li>
+            <li>플랫폼에 등록된 곡과만 비교합니다.</li>
+            <li>상용화 단계에서는 라이선스 몰수·정산 보류 관련 약관을 강화할 예정입니다.</li>
+          </ul>
         </div>
         <div className="mt-4 pt-4 border-t border-[#21262d]">
           <div className="flex items-center gap-2 text-xs text-[#9CA3AF] font-mono">
@@ -112,7 +124,12 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
     <>
       <header className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center px-6 border-b border-[#21262d] bg-[#0d1117]/95 backdrop-blur-sm">
         <div className="flex items-center gap-2 mr-8">
-          <img src={logoUrl} alt="Track-AI 로고" className="w-8 h-8 object-contain" />
+          <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 10 Q7 2 12 10" stroke="white" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+              <circle cx="7" cy="5" r="1.5" fill="white"/>
+            </svg>
+          </div>
           <span className="text-sm font-semibold tracking-tight text-white">Track-AI</span>
         </div>
         <nav className="flex items-center gap-1 flex-1">
@@ -127,14 +144,7 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
           </button>
         </nav>
         <div className="flex items-center gap-2">
-          {authLoading ? <span className="text-xs text-[#9CA3AF]">로그인 확인 중...</span> : user ? (
-            <>
-              <span className="text-xs text-[#e6edf3]" title={user.email}>{user.nickname}님</span>
-              <button onClick={onLogout} className="px-3 py-1.5 rounded bg-[#161b22] border border-[#30363d] text-[#9CA3AF] hover:text-white text-xs transition-colors">
-                로그아웃
-              </button>
-            </>
-          ) : <a href={auth.loginUrl} className="flex items-center gap-2 px-3 py-1.5 rounded bg-white hover:bg-gray-100 text-gray-800 text-xs font-medium transition-colors border border-gray-200">
+          {authLoading ? <span className="text-xs text-[#9CA3AF]">로그인 확인 중...</span> : user ? <><span className="text-xs text-[#e6edf3]" title={user.email}>{user.nickname}님</span><button onClick={onLogout} className="px-3 py-1.5 rounded bg-[#161b22] border border-[#30363d] text-[#9CA3AF] text-xs">로그아웃</button></> : <a href={auth.loginUrl} className="flex items-center gap-2 px-3 py-1.5 rounded bg-white hover:bg-gray-100 text-gray-800 text-xs font-medium transition-colors border border-gray-200">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -173,8 +183,8 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
                 { name: "MetaMask", icon: "🦊", desc: "Browser Extension" },
                 { name: "WalletConnect", icon: "🔗", desc: "Mobile & Desktop" },
               ].map(w => (
-                <button key={w.name} disabled title="지갑 API 연결 필요"
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-[#1c2128] border border-[#30363d] opacity-60 cursor-not-allowed">
+                <button key={w.name} onClick={() => { setWalletConnected(true); setShowWalletModal(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-[#1c2128] hover:bg-[#21262d] border border-[#30363d] transition-colors">
                   <span className="text-xl">{w.icon}</span>
                   <div className="text-left">
                     <div className="text-sm font-medium text-white">{w.name}</div>
@@ -190,89 +200,94 @@ function GNB({ screen, setScreen, walletConnected, setWalletConnected, showWalle
   );
 }
 
+// ─── Track Data ─────────────────────────────────────────────────────────────────
+const mockMarketplaceTracks: TrackData[] = [
+  { id: -1, title: "Neon Cascade", model: "Suno v4.5", price: "50 POL", genre: "Electronic", status: "pass", plays: "2.4k", contributors: 2, date: "2025-11-03", similarity: 31 },
+  { id: -2, title: "Ambient Drift 01", model: "Udio v2", price: "30 POL", genre: "Ambient", status: "pass", plays: "1.8k", contributors: 1, date: "2025-10-14", similarity: 24 },
+  { id: -3, title: "Lo-Fi Morning", model: "Suno v4.5", price: "80 POL", genre: "Lo-Fi", status: "pass", plays: "5.1k", contributors: 2, date: "2025-09-22", similarity: 42 },
+  { id: -4, title: "Synthetic Pulse", model: "Stable Audio 2.0", price: "60 POL", genre: "Techno", status: "checking", plays: "—", contributors: 1, date: "2026-01-05", similarity: 0 },
+  { id: -5, title: "Void Echoes", model: "Udio v2", price: "40 POL", genre: "Dark Ambient", status: "warn", plays: "920", contributors: 3, date: "2025-12-08", similarity: 78, note: "구매 전 유사도 리스크를 확인하세요" },
+  { id: -6, title: "Solar Wind", model: "Suno v4.5", price: "120 POL", genre: "Cinematic", status: "hold", plays: "—", contributors: 2, date: "2026-01-11", similarity: 91, note: "정산이 보류되어 검토 중입니다." },
+];
+
 // ─── Track Card ─────────────────────────────────────────────────────────────────
 function TrackCard({ track, onClick, onBuy }: { track: TrackData; onClick: () => void; onBuy: () => void }) {
   const [playing, setPlaying] = useState(false);
-  const isVerified = track.status === "verified";
-  const isPending = track.status === "pending";
-  const isRejected = track.status === "rejected";
+  const isPass = track.status === "pass";
+  const isWarn = track.status === "warn";
+  const isHold = track.status === "hold";
+  const isChecking = track.status === "checking";
+  const statusColor = isPass ? "#10b981" : isWarn ? "#f59e0b" : isHold ? "#f97316" : "#2f80ed";
+  const statusLabel = isPass ? "PASS" : isWarn ? "WARN" : isHold ? "HOLD" : "검증 중";
 
   return (
     <div onClick={onClick}
-      className={`bg-[#161b22] border rounded-xl overflow-hidden transition-all group cursor-pointer ${isRejected ? "border-red-500/30 opacity-80" : isPending ? "border-amber-500/30" : "border-[#21262d] hover:border-[#30363d]"}`}>
+      className={`bg-[#161b22] border rounded-xl overflow-hidden transition-all group cursor-pointer ${isHold ? "border-orange-500/40" : isWarn ? "border-amber-500/30" : "border-[#21262d] hover:border-[#30363d]"}`}>
       <div className="h-28 bg-gradient-to-br from-[#1c2128] to-[#0d1117] relative flex items-center justify-center">
-        <div className="absolute inset-0 opacity-20" style={{ background: isRejected ? "radial-gradient(ellipse at 30% 50%, #ef444433 0%, transparent 70%)" : isPending ? "radial-gradient(ellipse at 30% 50%, #f59e0b33 0%, transparent 70%)" : "radial-gradient(ellipse at 30% 50%, #2f80ed33 0%, transparent 70%)" }} />
-        {isVerified ? (
+        <div className="absolute inset-0 opacity-20" style={{ background: `radial-gradient(ellipse at 30% 50%, ${statusColor}33 0%, transparent 70%)` }} />
+        {!isChecking ? (
           <button onClick={e => { e.stopPropagation(); setPlaying(!playing); }}
             className="w-10 h-10 rounded-full bg-blue-500 hover:bg-blue-400 flex items-center justify-center transition-colors z-10">
             {playing ? <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><rect x="1" y="1" width="4" height="10" rx="1"/><rect x="7" y="1" width="4" height="10" rx="1"/></svg>
               : <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M3 2L10 6L3 10V2Z"/></svg>}
           </button>
         ) : (
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 text-lg ${isPending ? "bg-amber-500/10 border border-amber-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
-            {isPending ? "⏳" : "✗"}
+          <div className="w-10 h-10 rounded-full flex items-center justify-center z-10 border border-blue-500/30 bg-blue-500/10">
+            <div className="w-4 h-4 rounded-full border border-blue-400 border-t-transparent animate-spin"></div>
           </div>
         )}
         <div className="absolute bottom-3 left-4 right-4">
-          <Waveform seed={track.id} playing={playing} color={isRejected ? "#ef4444" : isPending ? "#f59e0b" : "#2f80ed"} />
+          <Waveform seed={track.id} playing={playing} color={statusColor} />
         </div>
       </div>
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
           <div>
-            <h3 className={`text-sm font-semibold text-white ${isVerified ? "group-hover:text-blue-400" : ""} transition-colors`}>{track.title}</h3>
+            <h3 className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">{track.title}</h3>
             <span className="text-xs text-[#9CA3AF] font-mono">{track.model}</span>
           </div>
           <div>
-            {isVerified && <Badge variant="verified">✓ AI Verified</Badge>}
-            {isPending && <Badge variant="warning">⏳ 검증 중</Badge>}
-            {isRejected && <Badge variant="danger">✗ 등록 차단</Badge>}
+            <Badge variant={isPass ? "verified" : isWarn ? "warning" : isHold ? "danger" : "primary"}>
+              {isChecking ? statusLabel : `${statusLabel} · 유사도 ${(track.similarity / 100).toFixed(2)}`}
+            </Badge>
           </div>
         </div>
-        {isRejected && (
-          <div className="text-[10px] text-red-400 font-mono bg-red-500/5 border border-red-500/20 rounded px-2 py-1 mb-2">
-            유사도 {track.similarity}% — {track.rejectReason}
+        {track.note && (
+          <div className={`text-[10px] font-mono rounded px-2 py-1 mb-2 border ${isHold ? "text-orange-400 bg-orange-500/5 border-orange-500/20" : "text-amber-400 bg-amber-500/5 border-amber-500/20"}`}>
+            {track.note}
           </div>
         )}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs text-[#9CA3AF] bg-[#1c2128] px-2 py-0.5 rounded font-mono">{track.genre}</span>
-          {isVerified && <span className="text-xs text-[#9CA3AF]">▶ {track.plays}</span>}
+          {!isChecking && <span className="text-xs text-[#9CA3AF]">▶ {track.plays}</span>}
           <span className="text-xs text-[#9CA3AF] ml-auto">👥 {track.contributors}</span>
         </div>
         <div className="flex items-center justify-between pt-3 border-t border-[#21262d]">
           <div>
-            {isVerified ? <div className="text-sm font-semibold text-white">{track.price}</div>
-              : <div className="text-xs text-[#9CA3AF] font-mono">{isPending ? "검증 대기 중" : "등록 거부됨"}</div>}
+            {!isChecking ? <div className="text-sm font-semibold text-white">{track.price}</div>
+              : <div className="text-xs text-[#9CA3AF] font-mono">검증 진행 중</div>}
           </div>
-          {isVerified && (
+          {(isPass || isWarn) && (
             <button onClick={e => { e.stopPropagation(); onBuy(); }}
               className="px-3 py-1.5 rounded bg-blue-500/10 hover:bg-blue-500 border border-blue-500/30 hover:border-blue-500 text-blue-400 hover:text-white text-xs font-medium transition-all">
-              라이선스 구매
+              {isWarn ? "ⓘ 라이선스 구매" : "라이선스 구매"}
             </button>
           )}
+          {isHold && <div className="flex gap-1"><button className="px-2 py-1.5 rounded border border-orange-500/30 text-orange-400 text-[10px]">근거 보기</button><button className="px-2 py-1.5 rounded border border-[#30363d] text-[#9CA3AF] text-[10px]">이의 제기</button></div>}
         </div>
+        {!isChecking && <div className="mt-3"><div className="relative flex h-1 overflow-hidden rounded-full"><div className="w-[70%] bg-emerald-500/50"></div><div className="w-[15%] bg-amber-500/60"></div><div className="w-[15%] bg-orange-500/60"></div><div className="absolute top-1/2 w-1.5 h-1.5 rounded-full bg-white border border-[#0d1117] -translate-y-1/2" style={{ left: `calc(${track.similarity}% - 3px)` }}></div></div><div className="flex justify-between text-[9px] text-[#6B7280] font-mono mt-1"><span>PASS</span><span>0.70</span><span>0.85</span><span>HOLD</span></div></div>}
       </div>
     </div>
   );
 }
 
 // ─── Marketplace ────────────────────────────────────────────────────────────────
-function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [tracks, setTracks] = useState<TrackData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+function MarketplaceScreen({ setScreen, tracks, loading, error }: { setScreen: (s: Screen) => void; tracks: TrackData[]; loading: boolean; error: string }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const genres = ["All", "Electronic", "Ambient", "Lo-Fi", "Cinematic", "Techno", "Dark Ambient"];
-
-  useEffect(() => {
-    fetchTracks()
-      .then(setTracks)
-      .catch(error => setError(error instanceof Error ? error.message : "트랙을 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtered = tracks.filter(t =>
+  const displayedTracks = [...tracks, ...mockMarketplaceTracks.filter(mock => !tracks.some(track => track.title === mock.title))];
+  const filtered = displayedTracks.filter(t =>
     (filter === "All" || t.genre === filter) &&
     (search === "" || t.title.toLowerCase().includes(search.toLowerCase()))
   );
@@ -284,13 +299,17 @@ function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#30363d] bg-[#161b22] text-xs text-[#9CA3AF] font-mono mb-5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
             Polygon Network (Amoy) · 1,247 트랙 온체인 등록
+            <span className="text-[9px] text-blue-400 border border-blue-500/30 rounded px-1">예시 데이터</span>
           </div>
           <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
-            프롬프트·보이스·편집,<br />
-            <span className="text-blue-400">기여한 만큼 자동 정산되는 AI 음원 마켓</span>
+            AI 음원의 상업적 이용권을 거래하는<br />
+            <span className="text-blue-400">Web3 마켓</span>
           </h1>
-          <p className="text-[#9CA3AF] text-sm mb-7 max-w-lg mx-auto">
-            모든 음원은 AI 유사도 검증 후 블록체인에 기록되며, 스마트 컨트랙트로 기여자에게 즉시 분배됩니다.
+          <p className="text-[#9CA3AF] text-sm mb-2 max-w-2xl mx-auto">
+            유사도 리스크 확인, 온체인 기록, 합의 비율 정산으로 구매자에게는 라이선스 영수증을, 창작자에게는 투명한 수익 정산을 제공합니다.
+          </p>
+          <p className="text-[#6B7280] text-[10px] mb-7 max-w-2xl mx-auto">
+            유사도는 음향적 비교이며 법적 표절 판단이 아닙니다. 플랫폼에 등록된 곡과만 비교합니다.
           </p>
           <div className="relative max-w-lg mx-auto">
             <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -303,11 +322,25 @@ function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       </div>
       <div className="border-b border-[#21262d] bg-[#0d1117]">
-          <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-6 text-xs font-mono text-[#9CA3AF]">
-            <span>시장 통계 API 연결 필요</span>
-          </div>
+        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-6 text-xs font-mono text-[#9CA3AF]">
+          {[["Total Volume", "842,400 POL"], ["트랙 등록", "1,247"], ["활성 크리에이터", "386명"]].map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2"><span>{k}</span><span className="text-white font-semibold">{v}</span><span className="text-[9px] text-blue-400">예시 데이터</span></div>
+          ))}
+        </div>
       </div>
       <div className="max-w-6xl mx-auto px-6 py-6">
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          {[
+            ["01", "유사도 검증", "Fingerprint + LAION-CLAP"],
+            ["02", "온체인 기록", "Polygon Amoy · ERC-1155"],
+            ["03", "라이선스 영수증", "EIP-712 · 자동 정산"],
+          ].map(([n, title, desc]) => (
+            <div key={n} className="flex items-center gap-3 rounded-lg border border-[#21262d] bg-[#161b22] px-4 py-3">
+              <span className="text-xs font-mono text-blue-400">{n}</span>
+              <div><div className="text-xs font-semibold text-white">{title}</div><div className="text-[10px] text-[#9CA3AF] font-mono">{desc}</div></div>
+            </div>
+          ))}
+        </div>
         <div className="flex items-center gap-2 mb-6">
           {genres.map(g => (
             <button key={g} onClick={() => setFilter(g)}
@@ -316,16 +349,20 @@ function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </button>
           ))}
         </div>
-        {loading && <p className="py-16 text-center text-sm text-[#9CA3AF]">트랙을 불러오는 중...</p>}
-        {!loading && error && <p className="py-16 text-center text-sm text-red-400">{error}</p>}
-        {!loading && !error && filtered.length === 0 && <p className="py-16 text-center text-sm text-[#9CA3AF]">등록된 트랙이 없습니다.</p>}
-        {!loading && !error && filtered.length > 0 && (
-          <div className="grid grid-cols-3 gap-4">
-            {filtered.map(track => (
-              <TrackCard key={track.id} track={track} onClick={() => setScreen("detail")} onBuy={() => setScreen("checkout")} />
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-4 mb-3 rounded-lg border border-[#21262d] bg-[#161b22] px-3 py-2 text-[10px] text-[#9CA3AF]">
+          <span><b className="text-emerald-400">PASS</b> 정산 정상</span>
+          <span><b className="text-amber-400">WARN</b> 구매자 확인 필요</span>
+          <span><b className="text-orange-400">HOLD</b> 정산 보류(에스크로)</span>
+          <span className="ml-auto font-mono">기준 0.70 / 0.85 · 예시 데이터</span>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {loading && <p className="col-span-3 text-sm text-[#9CA3AF]">트랙을 불러오는 중...</p>}
+          {error && <p role="alert" className="col-span-3 text-sm text-red-400">{error}</p>}
+          {!loading && !error && tracks.length === 0 && <p className="col-span-3 text-sm text-[#9CA3AF]">등록된 트랙이 없습니다.</p>}
+          {filtered.map(track => (
+            <TrackCard key={track.id} track={track} onClick={() => setScreen("detail")} onBuy={() => setScreen("checkout")} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -419,7 +456,7 @@ function AIPassView({ onSign, onReset }: { onSign: () => void; onReset: () => vo
               <div className="text-sm font-bold text-emerald-400">PASS — 독창성 검증 완료</div>
               <div className="text-xs text-[#9CA3AF] font-mono">gatekeeper-v2.1 · 2026-01-13 09:21:44 UTC</div>
             </div>
-            <Badge variant="verified">✓ AI Verified</Badge>
+            <Badge variant="verified">PASS · 유사도 0.08</Badge>
           </div>
           <div className="p-6 space-y-5">
             <div>
@@ -429,7 +466,7 @@ function AIPassView({ onSign, onReset }: { onSign: () => void; onReset: () => vo
                 </div>
                 <span className="text-xl font-black font-mono text-emerald-400">8%</span>
               </div>
-              <div className="text-[10px] text-[#9CA3AF] font-mono">최고 코사인 유사도 · 기준 임계값 85% · 표절 위험 없음</div>
+              <div className="text-[10px] text-[#9CA3AF] font-mono">최고 코사인 유사도 · PASS 구간 · 유사도 리스크 낮음</div>
             </div>
             <div>
               <div className="text-xs font-medium text-[#9CA3AF] mb-2">최근접 Top-3 음원</div>
@@ -475,16 +512,16 @@ function AIFailView({ onReset }: { onReset: () => void }) {
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/></svg>
             </div>
             <div className="flex-1">
-              <div className="text-sm font-bold text-red-400">FAIL — 등록 차단</div>
+              <div className="text-sm font-bold text-orange-400">HOLD — 검토 및 정산 보류</div>
               <div className="text-xs text-[#9CA3AF] font-mono">gatekeeper-v2.1 · 2026-01-13 09:21:44 UTC</div>
             </div>
-            <Badge variant="danger">✗ 표절 의심</Badge>
+            <Badge variant="danger">HOLD · 유사도 0.93</Badge>
           </div>
           <div className="p-6 space-y-5">
             <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
-              <div className="text-sm font-semibold text-red-400 mb-1">유사도 93% — 근사 복제 의심</div>
+              <div className="text-sm font-semibold text-orange-400 mb-1">유사도 0.93 — 유사한 곡 발견</div>
               <div className="text-xs text-[#9CA3AF]">
-                최근접 음원 <span className="text-white font-mono">"Solar Wind" (Suno v4.5)</span>과 코사인 유사도 93%가 검출되어 등록이 차단되었습니다. 임계값(85%)을 초과하면 독립 창작물로 인정되지 않습니다.
+                최근접 음원 <span className="text-white font-mono">"Solar Wind" (Suno v4.5)</span>과 높은 음향 유사도가 확인되어 검토 중입니다. 정산 금액은 에스크로에 보류되며 법적 판단을 의미하지 않습니다.
               </div>
             </div>
             <div>
@@ -512,12 +549,12 @@ function AIFailView({ onReset }: { onReset: () => void }) {
               </div>
             </div>
             <div className="text-xs text-[#9CA3AF] bg-[#1c2128] border border-[#30363d] rounded-lg p-3">
-              <span className="text-amber-400 font-medium">안내:</span> 음원을 충분히 변형하거나 원본 저작권자의 동의를 얻은 경우 재신청할 수 있습니다. 이의 제기는 support@track-ai.io로 문의해주세요.
+              <span className="text-amber-400 font-medium">안내:</span> 생성 기록이나 사용 허가 증빙을 첨부해 이의를 제기할 수 있습니다. 검토 기한은 예시 14일입니다.
             </div>
           </div>
         </div>
         <button onClick={onReset} className="w-full py-2.5 rounded-xl bg-[#161b22] border border-[#21262d] hover:border-[#30363d] text-sm text-white font-medium transition-colors">
-          다시 업로드하기
+          이의 제기 또는 다시 업로드
         </button>
       </div>
     </div>
@@ -525,78 +562,62 @@ function AIFailView({ onReset }: { onReset: () => void }) {
 }
 
 // ─── Upload Screen ──────────────────────────────────────────────────────────────
-function UploadScreen() {
+function UploadScreen({ onUploaded }: { onUploaded: () => void }) {
   const [stage, setStage] = useState<UploadStage>("idle");
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [inviteError, setInviteError] = useState("");
   const [prompt, setPrompt] = useState("Pulsing neon synth with driving 4/4 beat, hypnotic arpeggios, and late-night Tokyo cityscape vibes for a commercial trailer");
   const [platform, setPlatform] = useState("Suno v4.5");
   const [promptWeight, setPromptWeight] = useState(70);
   const [voiceWeight, setVoiceWeight] = useState(20);
   const [voiceAddress, setVoiceAddress] = useState("");
   const [voiceInvited, setVoiceInvited] = useState(false);
-  const [voiceInviteLoading, setVoiceInviteLoading] = useState(false);
-  const [voiceInviteError, setVoiceInviteError] = useState("");
-  const [projectFile, setProjectFile] = useState<File | null>(null);
+  const [voiceSigned, setVoiceSigned] = useState(false);
+  const [projectFile, setProjectFile] = useState("");
+  const [failDemo, setFailDemo] = useState(false);
+
   const editWeight = 100 - promptWeight - voiceWeight;
 
-  const selectFile = (file: File | undefined) => {
-    if (!file) return;
-    setSelectedFile(file);
-    setFileName(file.name);
-    setUploadError("");
-  };
-
   const handleInvite = async () => {
-    if (!voiceAddress) return;
-    setVoiceInviteLoading(true);
-    setVoiceInviteError("");
-    try {
-      await inviteVoiceContributor(voiceAddress);
-      setVoiceInvited(true);
-    } catch (error) {
-      setVoiceInviteError(error instanceof Error ? error.message : "초대에 실패했습니다.");
-    } finally {
-      setVoiceInviteLoading(false);
-    }
+    setInviteError("");
+    try { await inviteVoiceContributor(voiceAddress); setVoiceInvited(true); }
+    catch (error) { setInviteError(error instanceof Error ? error.message : "초대에 실패했습니다."); }
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-    setUploadError("");
+  const selectFile = (file?: File) => { if (file) { setSelectedFile(file); setFileName(file.name); setUploadError(""); } };
+
+  const handleAIDone = (result: "pass" | "fail") => setStage(result === "pass" ? "ai_pass" : "ai_fail");
+
+  const handleSign = async () => {
+    if (!selectedFile) { setUploadError("업로드할 실제 오디오 파일을 선택해 주세요."); setStage("idle"); return; }
     setStage("signing");
+    setUploading(true); setUploadError("");
     const formData = new FormData();
     formData.append("audio", selectedFile);
     formData.append("title", selectedFile.name.replace(/\.[^.]+$/, "") || selectedFile.name);
     formData.append("prompt", prompt);
     formData.append("workLog", JSON.stringify({ platform, promptWeight, voiceWeight, editWeight, voiceAddress }));
-    if (projectFile) {
-      setStage("idle");
-      setUploadError("프로젝트 파일 첨부는 아직 지원하지 않습니다. 첨부를 해제하고 음원만 업로드해 주세요.");
-      return;
-    }
-
-    try {
-      await uploadTrackApi(formData);
-      setStage("done");
-    } catch (error) {
-      setStage("idle");
-      setUploadError(error instanceof Error ? error.message : "업로드에 실패했습니다.");
-    }
+    try { await uploadTrackApi(formData); onUploaded(); setStage("done"); }
+    catch (error) { setUploadError(error instanceof Error ? error.message : "업로드에 실패했습니다."); setStage("idle"); }
+    finally { setUploading(false); }
   };
 
   const handleReset = () => {
     setStage("idle");
-    setFileName("");
-    setSelectedFile(null);
-    setUploadError("");
+    setFileName(""); setSelectedFile(null); setUploadError("");
     setVoiceInvited(false);
+    setVoiceSigned(false);
     setVoiceAddress("");
-    setVoiceInviteError("");
-    setProjectFile(null);
+    setFailDemo(false);
   };
+
+  if (stage === "ai_checking") return <AICheckingView fileName={fileName} failMode={failDemo} onDone={handleAIDone} />;
+  if (stage === "ai_pass") return <AIPassView onSign={handleSign} onReset={() => setStage("idle")} />;
+  if (stage === "ai_fail") return <AIFailView onReset={handleReset} />;
 
   return (
     <div className="pt-14 min-h-screen">
@@ -623,8 +644,8 @@ function UploadScreen() {
           <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
             onDrop={e => { e.preventDefault(); setDragging(false); selectFile(e.dataTransfer.files[0]); }}
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${dragging ? "border-blue-500 bg-blue-500/5" : fileName ? "border-emerald-500/40 bg-emerald-500/5" : "border-[#30363d] hover:border-[#484f58]"}`}
-            onClick={() => document.getElementById("track-file")?.click()}>
-            <input id="track-file" type="file" accept="audio/wav,audio/mpeg,audio/*" className="hidden" onChange={e => selectFile(e.target.files?.[0])} />
+            onClick={() => document.getElementById("audio-upload")?.click()}>
+            <input id="audio-upload" type="file" accept="audio/*" className="hidden" onChange={e => selectFile(e.target.files?.[0])} />
             {fileName ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
@@ -709,13 +730,17 @@ function UploadScreen() {
               <div className="flex gap-2">
                 <input value={voiceAddress} onChange={e => setVoiceAddress(e.target.value)} placeholder="0x... 또는 이메일 주소"
                   className="flex-1 px-3 py-2 rounded-lg bg-[#1c2128] border border-[#30363d] text-sm text-white placeholder-[#9CA3AF] focus:outline-none focus:border-blue-500 font-mono text-xs transition-colors" />
-                <button onClick={handleInvite} disabled={!voiceAddress || voiceInvited || voiceInviteLoading}
+                <button onClick={handleInvite} disabled={!voiceAddress || voiceInvited}
                   className="px-3 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                  {voiceInviteLoading ? "초대 중..." : voiceInvited ? "초대 전송됨" : "합의 서명 초대"}
+                  합의 서명 초대
                 </button>
               </div>
-              {voiceInvited && <div className="mt-2 text-xs font-mono text-emerald-400">✓ 초대가 전송되었습니다. 상대방의 서명 상태는 서버에서 확인됩니다.</div>}
-              {voiceInviteError && <div className="mt-2 text-xs font-mono text-red-400">{voiceInviteError}</div>}
+              {inviteError && <p role="alert" className="mt-2 text-xs text-red-400">{inviteError}</p>}
+              {voiceInvited && (
+                <div className={`mt-2 flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg border transition-all ${voiceSigned ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-amber-500/5 border-amber-500/20 text-amber-400"}`}>
+                  {voiceSigned ? "✓ 서명 완료 — 보이스 제공자가 기여도에 동의했습니다" : "⏳ 서명 대기 중 — 상대방의 합의 서명을 기다리고 있습니다"}
+                </div>
+              )}
             </div>
 
             {/* Smart contract deploy notice */}
@@ -727,13 +752,12 @@ function UploadScreen() {
             <div>
               <label className="block text-xs font-medium text-[#9CA3AF] mb-1.5">프로젝트 파일 <span className="text-[#9CA3AF] font-normal">(선택) — DAW 세션, 작업 로그</span></label>
               <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border border-dashed cursor-pointer transition-colors ${projectFile ? "border-emerald-500/30 bg-emerald-500/5" : "border-[#30363d] hover:border-[#484f58]"}`}
-                onClick={() => document.getElementById("project-file")?.click()}>
-                <input id="project-file" type="file" accept=".als,.flp,.logic,.zip" className="hidden" onChange={e => setProjectFile(e.target.files?.[0] ?? null)} />
+                onClick={() => !projectFile && setProjectFile("neon_cascade_project.als")}>
                 {projectFile ? (
                   <>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="#10b981" strokeWidth="1.2"/><path d="M4 5h6M4 7.5h4" stroke="#10b981" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                    <span className="text-xs font-mono text-emerald-400 flex-1">{projectFile.name}</span>
-                    <button onClick={e => { e.stopPropagation(); setProjectFile(null); }} className="text-[10px] text-[#9CA3AF] hover:text-white">제거</button>
+                    <span className="text-xs font-mono text-emerald-400 flex-1">{projectFile}</span>
+                    <button onClick={e => { e.stopPropagation(); setProjectFile(""); }} className="text-[10px] text-[#9CA3AF] hover:text-white">제거</button>
                   </>
                 ) : (
                   <>
@@ -745,10 +769,62 @@ function UploadScreen() {
             </div>
           </div>
 
-          {uploadError && <p className="text-sm text-red-400">{uploadError}</p>}
-          <button onClick={handleUpload} disabled={!selectedFile || stage === "signing"}
+          {/* Verification pipeline preview */}
+          <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">검증·민팅 파이프라인</h3>
+                <p className="text-[10px] text-[#9CA3AF] mt-0.5">제출 후 단계별 상태와 온체인 확정을 실시간으로 확인합니다.</p>
+              </div>
+              <div className="flex rounded-lg border border-[#30363d] p-0.5 text-[10px]">
+                {["정상 샘플", "변형 샘플", "중복 샘플", "서명 위조"].map((item, i) => <button key={item} className={`px-2 py-1 rounded ${i === 0 ? "bg-blue-500 text-white" : "text-[#9CA3AF]"}`}>{item}</button>)}
+              </div>
+            </div>
+            <div className="grid grid-cols-6 gap-2">
+              {["업로드", "L1 핑거프린트", "L2 CLAP", "EIP-712 서명", "컨트랙트 검증", "민팅 · IPFS"].map((item, i) => (
+                <div key={item} className="relative rounded-lg border border-[#30363d] bg-[#1c2128] p-2.5 min-h-[78px]">
+                  <span className="text-[9px] font-mono text-blue-400">0{i + 1}</span>
+                  <div className="text-[10px] font-medium text-white mt-1">{item}</div>
+                  <div className="text-[9px] text-[#6B7280] mt-2">대기 · -- ms</div>
+                </div>
+              ))}
+            </div>
+            <details className="mt-3 rounded-lg border border-[#30363d] bg-[#1c2128] px-3 py-2">
+              <summary className="cursor-pointer text-[10px] text-[#9CA3AF]">서명 Payload 미리보기</summary>
+              <div className="grid grid-cols-2 gap-1 mt-2 text-[9px] font-mono text-[#6B7280]">
+                <span>signer: 0x3a7f...c4d2</span><span>audioHash: 업로드 후 생성</span><span>score / zone: 분석 후 생성</span><span>nonce: 004892</span>
+              </div>
+            </details>
+            <p className="text-[10px] text-[#6B7280] mt-3">서명 확인은 검증 서버가 낸 판정이라는 의미이며 판정의 정확도를 보증하지 않습니다.</p>
+          </div>
+
+          {/* Creation history and rights */}
+          <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-white">창작 이력 및 권리 확인</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-[#9CA3AF]">생성 서비스<select className="mt-1.5 w-full px-3 py-2 rounded-lg bg-[#1c2128] border border-[#30363d] text-white"><option>Suno</option><option>Udio</option><option>Stable Audio</option><option>기타</option></select></label>
+              <label className="text-xs text-[#9CA3AF]">이용 플랜<select className="mt-1.5 w-full px-3 py-2 rounded-lg bg-[#1c2128] border border-[#30363d] text-white"><option>유료</option><option>무료</option></select></label>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {["공식 다운로드 경로로 받은 곡입니다", "Remix 기능으로 만든 곡이 아닙니다", "상업적 이용이 허용된 플랜입니다"].map(label => <label key={label} className="flex gap-2 rounded-lg border border-[#30363d] p-2.5 text-[10px] text-[#9CA3AF]"><input type="checkbox" className="accent-blue-500" defaultChecked />{label}</label>)}
+            </div>
+            <div className="rounded-lg border border-dashed border-[#30363d] px-3 py-2.5 text-xs text-[#9CA3AF]">창작 이력 파일 (프롬프트·작업 로그, 선택) · 클릭하여 업로드</div>
+            <p className="text-[10px] leading-relaxed text-[#6B7280]">프롬프트·로그 해시는 그 시점에 파일이 존재했음을 증명하며 창작자 여부까지 보증하지 않습니다. 정산 비율은 AI가 측정한 값이 아니라 공동 작업자가 합의하고 서명한 비율입니다.</p>
+          </div>
+
+          {/* Fail demo toggle */}
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#f59e0b" strokeWidth="1.2"/><path d="M7 4v3.5M7 9.5v.5" stroke="#f59e0b" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <span className="text-xs text-amber-400 flex-1">데모 시뮬레이션: 유사도 리스크 케이스 보기</span>
+            <button onClick={() => setFailDemo(!failDemo)} className={`relative w-9 h-5 rounded-full transition-colors ${failDemo ? "bg-red-500" : "bg-[#30363d]"}`}>
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${failDemo ? "left-4" : "left-0.5"}`}></div>
+            </button>
+          </div>
+
+          {uploadError && <p role="alert" className="text-sm text-red-400">{uploadError}</p>}
+          <button onClick={() => setStage("ai_checking")} disabled={!selectedFile || uploading}
             className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors">
-            {stage === "signing" ? "업로드 및 검증 처리 중..." : "AI 검증 후 온체인 Mint"}
+            {failDemo ? "AI 검증 시작 (HOLD 케이스 시뮬레이션)" : "AI 검증 후 온체인 Mint"}
           </button>
         </div>
       </div>
@@ -911,7 +987,7 @@ function DetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="verified">✓ AI Verified</Badge>
+                    <Badge variant="verified">PASS · 유사도 0.31</Badge>
                     <Badge variant="muted">Electronic</Badge>
                   </div>
                 </div>
@@ -953,18 +1029,30 @@ function DetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   { label: "플랫폼 수수료", value: 10, color: "#30363d" },
                 ]} />
               </div>
-              <div>
-                <div className="text-xs font-medium text-[#9CA3AF] mb-2">유사도 검증 결과</div>
-                <div className="flex items-center gap-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-3 py-2.5">
-                  <div className="flex items-center gap-2 flex-1">
-                    <div className="w-20 h-1.5 rounded-full bg-[#30363d] overflow-hidden">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: "12%" }}></div>
-                    </div>
-                    <span className="text-xs font-mono text-emerald-400 font-bold">12% similarity</span>
-                    <span className="text-xs text-[#9CA3AF] font-mono">— 최근접: Void Echoes</span>
+              <div className="space-y-3">
+                <div className="text-xs font-medium text-[#9CA3AF]">AI 검증 근거</div>
+                <div className="rounded-lg border border-[#30363d] bg-[#1c2128] p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-white">Layer 1 · 동일 파일 검사 (Audio Fingerprint)</span>
+                    <Badge variant="verified">일치 없음</Badge>
                   </div>
-                  <Badge variant="verified">✓ Pass</Badge>
+                  <p className="text-[10px] text-[#9CA3AF]">같은 파일 재등록은 자동 차단됩니다. 원작자 본인·허락받은 사용자는 예외 등록할 수 있습니다.</p>
                 </div>
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-white">Layer 2 · 유사도 검사 (CLAP)</span>
+                    <span className="text-lg font-black font-mono text-emerald-400">0.31</span>
+                  </div>
+                  <div className="relative flex h-2 overflow-hidden rounded-full mb-1"><div className="w-[70%] bg-emerald-500"></div><div className="w-[15%] bg-amber-500"></div><div className="w-[15%] bg-orange-500"></div><div className="absolute top-1/2 left-[31%] w-2.5 h-2.5 rounded-full bg-white border-2 border-[#0d1117] -translate-y-1/2"></div></div>
+                  <div className="flex justify-between text-[9px] text-[#9CA3AF] font-mono"><span>PASS</span><span>0.70</span><span>0.85</span><span>HOLD</span></div>
+                  <div className="mt-3 text-[10px] text-[#9CA3AF]">가장 비슷한 곡 TOP 3 · Void Echoes 0.31 (01:12–01:24) · Neon Grid 0.18 · Synthetic Pulse 0.12</div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-[#30363d] px-3 py-2">
+                  <span className="text-xs text-[#9CA3AF]">기여자 · 정산 비율</span>
+                  <span className="text-xs text-white">프롬프트 70% · 보이스 20% · 플랫폼 10%</span>
+                  <Badge variant="verified">합의 서명 완료</Badge>
+                </div>
+                <p className="text-[10px] leading-relaxed text-[#6B7280]">음향 유사도 결과이며 법적 표절 판단이 아닙니다. 플랫폼에 등록된 곡과만 비교합니다.</p>
               </div>
             </div>
           </div>
@@ -1020,7 +1108,7 @@ function DetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               <button onClick={() => setScreen("checkout")} className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-colors">
                 라이선스 구매하기
               </button>
-              <p className="text-xs text-[#9CA3AF] text-center mt-3">스마트 컨트랙트 즉시 정산 · 환불 불가</p>
+              <p className="text-xs text-[#9CA3AF] text-center mt-3">합의 비율 자동 정산 · 라이선스 영수증 발급</p>
               <button onClick={() => setShowInfringement(true)}
                 className="mt-3 w-full py-2 rounded-lg border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 text-xs text-red-400 font-medium transition-colors flex items-center justify-center gap-1.5">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1.5L10.5 9.5H1.5L6 1.5Z" stroke="#ef4444" strokeWidth="1.2"/><path d="M6 5v1.5M6 8.5v.5" stroke="#ef4444" strokeWidth="1.2" strokeLinecap="round"/></svg>
@@ -1045,26 +1133,80 @@ function DetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────────
-function DashboardScreen() {
-  const [tracks, setTracks] = useState<TrackData[]>([]);
-  const [error, setError] = useState("");
+const initialTxns = [
+  { date: "2025-12-28", track: "Neon Cascade", buyer: "0x9f2a...b3c1", license: "Standard", role: "creator", split: "70%", earned: "35 POL", status: "settled" },
+  { date: "2025-12-15", track: "Void Echoes", buyer: "0x7f2c...a3d1", license: "Standard", role: "voice", split: "20%", earned: "10 POL", status: "frozen" },
+  { date: "2025-12-10", track: "Ambient Drift 01", buyer: "0x1d4e...7f9a", license: "Exclusive", role: "creator", split: "70%", earned: "245 POL", status: "settled" },
+  { date: "2025-11-28", track: "Neon Cascade", buyer: "0x5c7b...2e4d", license: "Standard", role: "creator", split: "70%", earned: "35 POL", status: "settled" },
+  { date: "2025-11-15", track: "Solar Wind", buyer: "0x3a8f...d1e2", license: "Standard", role: "voice", split: "20%", earned: "24 POL", status: "settled" },
+  { date: "2025-10-30", track: "Lo-Fi Morning", buyer: "0x6e1c...9b5f", license: "Exclusive", role: "creator", split: "70%", earned: "245 POL", status: "settled" },
+];
+
+const myTracks = [
+  { title: "Neon Cascade", status: "verified", genre: "Electronic", model: "Suno v4.5", date: "2025-11-03", earnings: "175 POL" },
+  { title: "Ambient Drift 01", status: "verified", genre: "Ambient", model: "Udio v2", date: "2025-10-14", earnings: "245 POL" },
+  { title: "Lo-Fi Morning", status: "verified", genre: "Lo-Fi", model: "Suno v4.5", date: "2025-09-22", earnings: "245 POL" },
+  { title: "Void Echoes", status: "verified", genre: "Dark Ambient", model: "Udio v2", date: "2025-12-08", earnings: "10 POL" },
+  { title: "Solar Wind", status: "verified", genre: "Cinematic", model: "Suno v4.5", date: "2025-11-20", earnings: "84 POL" },
+  { title: "Synthetic Pulse", status: "pending", genre: "Techno", model: "Stable Audio 2.0", date: "2026-01-05", earnings: "—" },
+  { title: "Orion Drift", status: "rejected", genre: "Electronic", model: "Suno v4.5", date: "2026-01-11", earnings: "—" },
+];
+
+function DashboardScreen({ tracks, loading, error }: { tracks: TrackData[]; loading: boolean; error: string }) {
+  const [totalEarned, setTotalEarned] = useState(594);
+  const [txns, setTxns] = useState(initialTxns);
+  const [animated, setAnimated] = useState(false);
+  const [justBought, setJustBought] = useState(false);
   const [trackTab, setTrackTab] = useState<"all" | "verified" | "pending" | "rejected">("all");
+  const [showAppeal, setShowAppeal] = useState(false);
 
   useEffect(() => {
-    fetchTracks().then(setTracks).catch(error => setError(error instanceof Error ? error.message : "트랙을 불러오지 못했습니다."));
+    const t = setTimeout(() => {
+      setTotalEarned(prev => prev + 35);
+      setTxns(prev => [
+        { date: "2026-01-13", track: "Neon Cascade", buyer: "0x2b9e...f1a4", license: "Standard", role: "creator", split: "70%", earned: "35 POL", status: "settled" },
+        ...prev,
+      ]);
+      setAnimated(true); setJustBought(true);
+      setTimeout(() => setAnimated(false), 600);
+    }, 1500);
+    return () => clearTimeout(t);
   }, []);
 
   const stats = [
-    { label: "총 누적 수익", value: "-", sub: "거래 API 연결 필요", delta: "", up: false, animate: false },
-    { label: "이번 달 거래", value: "-", sub: "거래 API 연결 필요", delta: "", up: false, animate: false },
-    { label: "등록된 음원", value: `${tracks.length}개`, sub: "API 응답 기준", delta: "", up: false, animate: false },
-    { label: "평균 유사도", value: "-", sub: "검증 결과 API 연결 필요", delta: "", up: false, animate: false },
+    { label: "총 누적 수익", value: `${totalEarned} POL`, sub: `≈ $${(totalEarned * 0.87).toFixed(0)} USD`, delta: "+35 POL", up: true, animate: animated },
+    { label: "이번 달 거래", value: "14건", sub: "전월 대비 +3건", delta: "+27%", up: true, animate: false },
+    { label: "등록된 음원", value: "7개", sub: "Active 5 · Pending 1 · Rejected 1", delta: "", up: false, animate: false },
+    { label: "평균 유사도", value: "11.3%", sub: "최근 30일 기준", delta: "안전 구간", up: false, animate: false },
   ];
 
-  const filteredTracks = trackTab === "all" ? tracks : tracks.filter(t => t.status === trackTab);
+  const mockDashboardTracks: TrackData[] = myTracks.map((track, index) => ({
+    id: -100 - index,
+    title: track.title,
+    model: track.model,
+    price: track.earnings,
+    genre: track.genre,
+    status: track.status === "verified" ? "pass" : track.status === "pending" ? "checking" : "hold",
+    plays: "—",
+    contributors: 1,
+    date: track.date,
+  }));
+  const displayedTracks = [...tracks, ...mockDashboardTracks.filter(mock => !tracks.some(track => track.title === mock.title))];
+  const filteredTracks = displayedTracks.filter(t => trackTab === "all" || (trackTab === "verified" ? t.status === "pass" : trackTab === "pending" ? t.status === "checking" : t.status === "hold"));
 
   return (
     <div className="pt-14 min-h-screen">
+      {showAppeal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowAppeal(false)}>
+          <div className="w-[480px] rounded-2xl border border-orange-500/30 bg-[#161b22] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5"><h3 className="font-semibold text-white">HOLD 이의 제기</h3><button onClick={() => setShowAppeal(false)} className="text-[#9CA3AF]">닫기</button></div>
+            <label className="block text-xs text-[#9CA3AF] mb-4">이의 제기 사유<textarea rows={5} placeholder="검토에 필요한 사실과 근거를 입력하세요" className="mt-1.5 w-full resize-none rounded-lg border border-[#30363d] bg-[#1c2128] p-3 text-sm text-white placeholder-[#6B7280]" /></label>
+            <div className="rounded-lg border border-dashed border-[#30363d] px-3 py-3 text-xs text-[#9CA3AF] mb-3">생성 기록·증빙 파일 업로드</div>
+            <p className="text-[10px] text-[#6B7280] mb-5">보류된 금액은 아직 지급되지 않은 컨트랙트 잔액입니다.</p>
+            <button onClick={() => setShowAppeal(false)} className="w-full rounded-lg bg-blue-500 py-2.5 text-sm font-semibold text-white">증빙 제출</button>
+          </div>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto px-6 py-7">
         <div className="flex items-center justify-between mb-7">
           <div>
@@ -1072,10 +1214,11 @@ function DashboardScreen() {
             <div className="flex items-center gap-2 text-xs text-[#9CA3AF] font-mono">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
               실시간 정산 · 스마트 컨트랙트 자동 실행
+              {justBought && <span className="text-emerald-400 ml-2">· 새 거래 확인됨</span>}
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs font-mono text-[#9CA3AF] bg-[#161b22] border border-[#21262d] px-3 py-1.5 rounded-lg">
-            <span>지갑</span><span className="text-white">연결 필요</span>
+            <span>지갑</span><span className="text-white">0x3a7f...c4d2</span>
           </div>
         </div>
 
@@ -1093,16 +1236,41 @@ function DashboardScreen() {
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-6">
+          {[["정산 완료", `${totalEarned} POL`, "12건"], ["에스크로 보류 중", "10 POL", "HOLD 1건"], ["검토 중인 트랙", "1개", "기한 예시 14일"]].map(([label, value, sub], i) => (
+            <div key={label} className={`rounded-xl border p-4 ${i === 1 ? "border-orange-500/30 bg-orange-500/5" : "border-[#21262d] bg-[#161b22]"}`}>
+              <div className="text-xs text-[#9CA3AF]">{label}</div><div className="text-xl font-bold font-mono text-white mt-1">{value}</div><div className="text-[10px] text-[#6B7280] mt-1">{sub} · 예시 데이터</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-xl border border-orange-500/30 bg-[#161b22] p-5 mb-6">
+          <div className="flex items-start justify-between mb-4">
+            <div><div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-white">HOLD 처리 현황 · Void Echoes</h3><Badge variant="danger">유사도 0.91</Badge></div><p className="text-xs text-[#9CA3AF] mt-1">정산 10 POL이 에스크로에 보류되어 검토 중입니다.</p></div>
+            <button onClick={() => setShowAppeal(true)} className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-400">이의 제기</button>
+          </div>
+          <div className="flex items-center">
+            {["검토 접수", "검토 중", "해제 또는 환불"].map((step, i) => <div key={step} className="flex flex-1 items-center"><div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] ${i < 2 ? "border-orange-500 bg-orange-500/10 text-orange-400" : "border-[#30363d] text-[#6B7280]"}`}>{i + 1}</div><span className={`ml-2 text-xs ${i < 2 ? "text-white" : "text-[#6B7280]"}`}>{step}</span>{i < 2 && <div className="mx-3 h-px flex-1 bg-orange-500/30"></div>}</div>)}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="col-span-2 bg-[#161b22] border border-[#21262d] rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-white">월별 수익</h3>
               <Badge variant="muted">최근 6개월</Badge>
             </div>
-            <div className="h-28 flex items-center justify-center text-sm text-[#9CA3AF]">수익 데이터 API 연결 필요</div>
+            <div className="flex items-end gap-2 h-28">
+              {[0.12, 0.08, 0.19, 0.24, 0.15, 0.35].map((v, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                  <div className="w-full rounded-t" style={{ height: `${v * 280}px`, background: i === 5 ? "#2f80ed" : "#21262d" }}></div>
+                  <span className="text-xs font-mono text-[#9CA3AF]">{["8월", "9월", "10월", "11월", "12월", "1월"][i]}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white mb-3">라이선스 유형</h3>
-            <div className="h-28 flex items-center justify-center text-sm text-[#9CA3AF]">라이선스 데이터 API 연결 필요</div>
+            <PieChart slices={[{ label: "Standard BGM", value: 68, color: "#2f80ed" }, { label: "Exclusive", value: 32, color: "#7c3aed" }]} />
           </div>
         </div>
 
@@ -1114,35 +1282,74 @@ function DashboardScreen() {
               {(["all", "verified", "pending", "rejected"] as const).map(tab => (
                 <button key={tab} onClick={() => setTrackTab(tab)}
                   className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${trackTab === tab ? "bg-[#21262d] text-white" : "text-[#9CA3AF] hover:text-white"}`}>
-                  {tab === "all" ? "전체" : tab === "verified" ? "검증 완료" : tab === "pending" ? "검증 대기" : "등록 거부"}
+                  {tab === "all" ? "전체" : tab === "verified" ? "PASS" : tab === "pending" ? "검증 중" : "HOLD"}
                 </button>
               ))}
             </div>
           </div>
           <div className="divide-y divide-[#21262d]">
-            {error && <div className="px-5 py-6 text-sm text-red-400">{error}</div>}
-            {!error && filteredTracks.length === 0 && <div className="px-5 py-6 text-sm text-[#9CA3AF]">등록된 음원이 없습니다.</div>}
-            {!error && filteredTracks.map(t => (
+            {loading && <div className="px-5 py-6 text-sm text-[#9CA3AF]">트랙을 불러오는 중...</div>}
+            {error && <div role="alert" className="px-5 py-6 text-sm text-red-400">{error}</div>}
+            {!loading && !error && filteredTracks.length === 0 && <div className="px-5 py-6 text-sm text-[#9CA3AF]">등록된 트랙이 없습니다.</div>}
+            {filteredTracks.map((t) => (
               <div key={t.id} className="flex items-center px-5 py-3 hover:bg-[#1c2128] transition-colors">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-white">{t.title}</span>
-                    {t.status === "verified" && <Badge variant="verified">✓</Badge>}
-                    {t.status === "pending" && <Badge variant="warning">⏳ 검증 중</Badge>}
-                    {t.status === "rejected" && <Badge variant="danger">✗ 거부</Badge>}
+                    {t.status === "pass" && <Badge variant="verified">PASS</Badge>}
+                    {t.status === "checking" && <Badge variant="warning">검증 중</Badge>}
+                    {t.status === "hold" && <Badge variant="danger">HOLD</Badge>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-xs text-[#9CA3AF] font-mono">
                     <span>{t.genre}</span><span>·</span><span>{t.model}</span><span>·</span><span>{t.date}</span>
                   </div>
                 </div>
-                <div className="text-sm font-mono text-[#9CA3AF]">{t.price}</div>
+                <div className="text-sm font-mono font-semibold text-emerald-400">{t.price}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 text-sm text-[#9CA3AF]">
-          거래 내역 API가 연결되면 이 영역에 표시됩니다.
+        {/* Transactions */}
+        <div className="bg-[#161b22] border border-[#21262d] rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[#21262d]">
+            <h3 className="text-sm font-semibold text-white">트랜잭션 히스토리</h3>
+            <span className="text-xs text-[#9CA3AF] font-mono">{txns.length}건</span>
+          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#21262d]">
+                {["날짜", "음원명", "구매자 지갑", "라이선스", "내 역할", "지분", "내 수령액", "상태 / TX"].map(h => (
+                  <th key={h} className="text-left px-5 py-3 text-xs font-medium text-[#9CA3AF] uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {txns.map((tx, i) => (
+                <tr key={i} className={`border-b border-[#21262d] last:border-0 transition-colors ${tx.status === "frozen" ? "bg-amber-500/5" : i === 0 && justBought ? "bg-emerald-500/5" : "hover:bg-[#1c2128]"}`}>
+                  <td className="px-5 py-3 text-xs font-mono text-[#9CA3AF]">{tx.date}</td>
+                  <td className="px-5 py-3 text-xs text-white font-medium">{tx.track}</td>
+                  <td className="px-5 py-3 text-xs font-mono text-blue-400">{tx.buyer}</td>
+                  <td className="px-5 py-3"><Badge variant={tx.license === "Exclusive" ? "primary" : "muted"}>{tx.license}</Badge></td>
+                  <td className="px-5 py-3">
+                    <span className={`text-xs font-mono ${tx.role === "voice" ? "text-purple-400" : "text-[#9CA3AF]"}`}>
+                      {tx.role === "voice" ? "보이스" : "크리에이터"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-xs font-mono text-[#9CA3AF]">{tx.split}</td>
+                  <td className="px-5 py-3">
+                    {tx.status === "frozen"
+                      ? <span className="text-xs font-mono font-semibold text-amber-400">⏸ {tx.earned} 동결</span>
+                      : <span className="text-xs font-mono font-semibold text-emerald-400">{i === 0 && justBought ? "↑ " : ""}{tx.earned}</span>}
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className={`text-[10px] font-medium ${tx.status === "frozen" ? "text-orange-400" : "text-emerald-400"}`}>{tx.status === "frozen" ? "정산 보류(HOLD)" : "정산 완료"}</div>
+                    <div className="text-[9px] font-mono text-blue-400 mt-0.5">0x7d2f...a91c ↗</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -1156,7 +1363,7 @@ function CheckoutScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [paymentMethod, setPaymentMethod] = useState<"google" | "metamask">("google");
   const prices = { standard: { pol: "50 POL", usd: "$43.50" }, exclusive: { pol: "350 POL", usd: "$304.50" } };
 
-  const handleConfirm = () => setStage("signing");
+  const handleConfirm = () => { setStage("signing"); setTimeout(() => setStage("confirmed"), 2200); };
 
   return (
     <div className="pt-14 min-h-screen flex items-start justify-center">
@@ -1194,8 +1401,7 @@ function CheckoutScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   <span className="text-xs text-[#9CA3AF]">Suno v4.5</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="verified">✓ AI Verified</Badge>
-                  <Badge variant="muted">유사도 12%</Badge>
+                  <Badge variant="verified">PASS · 유사도 0.31</Badge>
                 </div>
               </div>
             </div>
@@ -1321,7 +1527,7 @@ function CheckoutScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   <span className="text-sm text-emerald-400 font-semibold">결제 및 트랜잭션 완료</span>
                 </div>
                 <button onClick={() => setScreen("certificate")} className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors">
-                  AI 독창성 검증 리포트 보기 →
+                  라이선스 영수증 보기 →
                 </button>
               </div>
             )}
@@ -1379,8 +1585,8 @@ function CertificateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 13L9 17L19 7" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">결제가 완료되었습니다</h2>
-            <p className="text-sm text-[#9CA3AF] max-w-md mx-auto">ERC-1155 라이선스 NFT가 지갑으로 전송되었습니다. AI 독창성 검증 리포트를 확인하세요.</p>
+            <h2 className="text-xl font-bold text-white mb-2">상업적 이용 허가 증명서</h2>
+            <p className="text-sm text-[#9CA3AF] max-w-md mx-auto">결제가 완료되어 ERC-1155 라이선스 NFT와 EIP-712 영수증이 발급되었습니다.</p>
             <div className="flex items-center justify-center gap-3 mt-4 text-xs font-mono text-[#9CA3AF]">
               <span>TX: <span className="text-blue-400">0x7d2f...a91c</span></span>
               <span>·</span>
@@ -1391,11 +1597,31 @@ function CertificateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           </div>
         </div>
 
+        <div className="bg-[#161b22] border border-blue-500/20 rounded-2xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-5">
+            <div><div className="text-sm font-semibold text-white">라이선스 영수증</div><div className="text-[10px] text-[#9CA3AF] font-mono mt-1">LICENSE RECEIPT · Polygon Amoy</div></div>
+            <Badge variant="verified">PASS · 0.31</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+            {[
+              ["트랙명", "Neon Cascade"], ["라이선스 유형", "비독점 상업 이용권"],
+              ["구매자 지갑", "0x3a7f...c4d2"], ["판매자 지갑", "0x8f3a...d7e1"],
+              ["가격", "50 POL"], ["발급 시각", "2026-01-13 09:21 UTC"],
+              ["트랜잭션 해시", "0x7d2f...a91c"], ["IPFS", "QmLf3x7...w9Kp"],
+            ].map(([k, v]) => <div key={k} className="flex items-center justify-between border-b border-[#21262d] pb-2"><span className="text-xs text-[#9CA3AF]">{k}</span><span className="text-xs text-white font-mono">{v}</span></div>)}
+          </div>
+          <div className="mt-5 rounded-lg border border-[#30363d] bg-[#1c2128] p-4">
+            <div className="text-xs font-semibold text-white mb-2">정산 내역 · 합의 비율대로 자동 분배</div>
+            <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-[#9CA3AF]"><span>프롬프트 70% · 35 POL</span><span>보이스 20% · 10 POL</span><span>플랫폼 10% · 5 POL</span></div>
+          </div>
+          <p className="text-[10px] text-[#6B7280] mt-4">이 문서는 사적 계약 형태의 상업적 이용 허가 증빙이며 법적 저작권을 이전하지 않습니다.</p>
+        </div>
+
         <div className="bg-[#161b22] border border-[#21262d] rounded-2xl overflow-hidden mb-6">
           <div className="px-6 py-4 border-b border-[#21262d] bg-[#1c2128] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1L13 4V10L7 13L1 10V4L7 1Z" stroke="#7c3aed" strokeWidth="1.4"/><circle cx="7" cy="7" r="2" fill="#7c3aed"/></svg>
-              <span className="text-sm font-semibold text-white">AI 독창성 검증 리포트</span>
+              <span className="text-sm font-semibold text-white">AI 유사도 리스크 검증 리포트</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#9CA3AF] font-mono">gatekeeper-v2.1</span>
@@ -1446,9 +1672,9 @@ function CertificateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10.5L8 14.5L16 6.5" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
                 <div className="flex-1">
-                  <div className="text-base font-bold text-emerald-400 mb-1">PASS — 독창성 검증 완료</div>
+                  <div className="text-base font-bold text-emerald-400 mb-1">PASS - 높은 유사도 리스크 없음</div>
                   <div className="text-sm text-[#e6edf3] mb-3">
-                    유사도 <span className="font-mono font-bold text-emerald-400">12%</span> (기준: 85% 미만) — 표절 위험 없음. 독립 창작물로 판정됩니다.
+                    유사도 <span className="font-mono font-bold text-emerald-400">0.31</span> — PASS 구간이며 현재 비교 대상 중 유사도 리스크가 낮습니다.
                   </div>
                   <div className="mb-3">
                     <div className="text-xs font-medium text-[#9CA3AF] mb-2">최근접 Top-3 음원</div>
@@ -1508,11 +1734,11 @@ function CertificateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div className="flex items-center gap-3">
           <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#161b22] border border-[#21262d] hover:border-[#30363d] text-sm text-white font-medium transition-colors">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            리포트 PDF 다운로드
+            증명서 다운로드(EIP-712)
           </button>
           <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#161b22] border border-[#21262d] hover:border-[#30363d] text-sm text-white font-medium transition-colors">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Polygonscan (Amoy) 확인
+            Amoy 탐색기에서 보기
           </button>
           <button onClick={() => setScreen("marketplace")} className="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-sm text-white font-semibold transition-colors">
             마켓플레이스로 →
@@ -1529,31 +1755,35 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
+  const [apiTracks, setApiTracks] = useState<TrackData[]>([]);
+  const [tracksLoading, setTracksLoading] = useState(true);
+  const [tracksError, setTracksError] = useState("");
   const [walletConnected, setWalletConnected] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
 
+  const refreshTracks = () => {
+    setTracksLoading(true);
+    fetchTracks().then(data => { setApiTracks(data.map(toDesignTrack)); setTracksError(""); })
+      .catch(error => setTracksError(error instanceof Error ? error.message : "트랙을 불러오지 못했습니다."))
+      .finally(() => setTracksLoading(false));
+  };
+
   useEffect(() => {
     let active = true;
     const params = new URLSearchParams(window.location.search);
-    if (params.has("reason")) setAuthError("Google 로그인에 실패했거나 취소되었습니다. 다시 시도해 주세요.");
     const returnedFromLogin = params.get("login") === "success";
+    if (params.has("reason")) setAuthError("Google 로그인에 실패했거나 취소되었습니다.");
     params.delete("login"); params.delete("reason");
     window.history.replaceState(null, "", window.location.pathname + (params.size ? `?${params}` : "") + window.location.hash);
-    auth.me().then(value => {
-      if (active) setUser(value);
-    }).catch(error => {
-      if (active && (!(error instanceof AuthError) || returnedFromLogin)) setAuthError("로그인 상태를 확인하지 못했습니다. 다시 로그인해 주세요. 브라우저에서 타사 쿠키를 차단하면 로그인이 유지되지 않을 수 있습니다.");
-    }).finally(() => {
-      if (active) setAuthLoading(false);
-    });
+    auth.me().then(value => { if (active) setUser(value); })
+      .catch(error => { if (active && (!(error instanceof AuthError) || returnedFromLogin)) setAuthError("로그인 상태를 확인하지 못했습니다. 다시 로그인해 주세요."); })
+      .finally(() => { if (active) setAuthLoading(false); });
+    refreshTracks();
     return () => { active = false; };
   }, []);
 
-  const handleLogout = async () => {
-    await auth.logout();
-    setUser(null);
-  };
+  const handleLogout = async () => { await auth.logout(); setUser(null); };
 
   return (
     <div className="min-h-screen bg-[#0d1117]">
@@ -1565,10 +1795,10 @@ export default function App() {
         user={user} authLoading={authLoading} onLogout={handleLogout}
       />
       {authError && <p role="alert" className="pt-20 px-6 text-red-400">{authError}</p>}
-      {screen === "marketplace" && <MarketplaceScreen setScreen={setScreen} />}
-      {screen === "upload" && <UploadScreen />}
+      {screen === "marketplace" && <MarketplaceScreen setScreen={setScreen} tracks={apiTracks} loading={tracksLoading} error={tracksError} />}
+      {screen === "upload" && <UploadScreen onUploaded={refreshTracks} />}
       {screen === "detail" && <DetailScreen setScreen={setScreen} />}
-      {screen === "dashboard" && <DashboardScreen />}
+      {screen === "dashboard" && <DashboardScreen tracks={apiTracks} loading={tracksLoading} error={tracksError} />}
       {screen === "checkout" && <CheckoutScreen setScreen={setScreen} />}
       {screen === "certificate" && <CertificateScreen setScreen={setScreen} />}
     </div>
