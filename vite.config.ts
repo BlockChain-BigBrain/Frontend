@@ -20,6 +20,12 @@ export default defineConfig(({ mode }) => {
     plugins: [
       {
         name: 'github-pages-nojekyll',
+        transformIndexHtml: {
+          order: 'post',
+          handler(html) {
+            return html.replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '')
+          },
+        },
         generateBundle() {
           this.emitFile({ type: 'asset', fileName: '.nojekyll', source: '' })
         },

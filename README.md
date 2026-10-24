@@ -1,5 +1,7 @@
 # Track AI Frontend
 
+AI 검증 보고서는 원시 점수를 확률처럼 표시하지 않고, 실제 판정·검색 범위·원곡 후보·매칭 구간을 표시합니다. 긴 편집의 세 매칭 구간과 정책·임계값은 `VerificationEvidence`에서 확인할 수 있습니다. 분석 실패나 근거가 없는 기록을 PASS로 표시하지 않습니다. 이번 변경은 기존 design-v2·인증·지갑·판매 흐름을 유지합니다.
+
 React + TypeScript + Vite 기반 Google 로그인 화면입니다.
 
 ## 실행

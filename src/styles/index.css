@@ -2,6 +2,10 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 
+/* Generated bundles must not become inputs to the next production build. */
+@source not '../../docs';
+@source not '../../dist';
+
 @theme {
   --color-bg: #0d1117;
   --color-surface: #161b22;
