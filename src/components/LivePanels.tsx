@@ -1,13 +1,12 @@
+import { VerificationEvidence } from "./VerificationEvidence";
 import { auth } from "../api";
 import { useState, type FormEvent } from "react";
 import { useService } from "../integration";
 import { api, passwordAuth } from "../api/service";
 export const liveButton = "px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed";
 export function ReportPanel() {
-  const s = useService(), v = s.verification, e = v?.evidence;
-  if (!v) return <p className="text-sm text-[#9CA3AF]">아직 검증 결과가 없습니다.</p>;
-  const score = e ? e.similarityScore : v.riskScore;
-  return <div className="space-y-4"><div className="rounded-xl border border-[#30363d] bg-[#1c2128] p-4"><h3 className="text-sm font-semibold text-white">{e?.decision || v.riskStatus || v.status}</h3><p className="mt-2 text-sm text-[#9CA3AF]">유사도: {score == null ? "미산출" : `${(Number(score) * 100).toFixed(2)}%`}</p><p className="mt-2 text-xs text-[#9CA3AF]">{v.duplicate ? "동일 지문이 감지되어 등록이 차단됐습니다." : e?.reviewRequired ? "검토가 필요하여 자동 등록이 보류됐습니다." : "유사도 분석은 법적 표절 판단이나 권리 보유를 보증하지 않습니다."}</p>{e?.provisional && <p className="mt-2 text-xs text-amber-400">잠정 임계값으로 분석한 결과입니다.</p>}</div><div className="rounded-xl border border-[#30363d] p-4"><div className="text-xs text-[#9CA3AF]">모델: {v.modelVersion || "—"}</div>{e?.similarTracks?.map((x: any) => <div key={x.trackId} className="mt-2 flex justify-between text-xs font-mono"><span>{x.trackId}</span><span>{(x.score * 100).toFixed(2)}%</span></div>)}<details className="mt-3 text-xs text-blue-400"><summary>버전 · 임계값 · 비교 구간 보기</summary><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all text-[#9CA3AF]">{JSON.stringify(e || v, null, 2)}</pre></details></div></div>;
+  const s = useService();
+  return <VerificationEvidence verification={s.verification} />;
 }
 export function SessionPanel() {
   const s = useService(), [email, setEmail] = useState(""), [password, setPassword] = useState(""), [name, setName] = useState(""), [signup, setSignup] = useState(false);
