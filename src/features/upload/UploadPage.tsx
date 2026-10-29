@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react"
+import { auth } from "../../api"
+import { AuthError } from "../../auth"
+import { api } from "../../api/service"
+import { useEffect, useRef, useState } from "react"
 import ChainResultPanel from "../chain-result/ChainResultPanel"
 import Badge from "../../shared/components/Badge"
 import Waveform from "../../shared/components/Waveform"
@@ -412,6 +415,48 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const [stage, setStage] = useState<UploadStage>("idle")
   const [dragging, setDragging] = useState(false)
   const [fileName, setFileName] = useState("")
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const audioInput = useRef<HTMLInputElement>(null)
+  const uploadLock = useRef(false)
+  const [title, setTitle] = useState("")
+  const [workLog, setWorkLog] = useState("")
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState("")
+  const [uploadedId, setUploadedId] = useState<number | null>(null)
+  function selectAudio(file: File | undefined) {
+    if (!file || uploadLock.current) return
+    setUploadedId(null)
+    if (!/\.(mp3|wav)$/i.test(file.name) || file.size > 100 * 1024 * 1024 || file.size === 0) {
+      setUploadError("100MB 이하의 비어 있지 않은 MP3 또는 WAV 파일을 선택해 주세요.")
+      return
+    }
+    setAudioFile(file)
+    setFileName(file.name)
+    setTitle(file.name.replace(/\.[^.]+$/, ""))
+    setUploadError("")
+  }
+  async function handleUpload() {
+    if (uploadLock.current) return
+    if (!audioFile || !title.trim()) { setUploadError("음원 파일과 제목을 입력해 주세요."); return }
+    uploadLock.current = true
+    setUploading(true)
+    setUploadError("")
+    setUploadedId(null)
+    try {
+      await auth.me()
+      const form = new FormData()
+      form.set("audio", audioFile)
+      form.set("title", title.trim())
+      form.set("prompt", prompt)
+      form.set("workLog", workLog)
+      form.set("isPublic", "true")
+      const track = await api("/api/tracks", form)
+      if (!Number.isInteger(track.id) || track.id <= 0) throw new Error("서버의 업로드 응답을 확인해 주세요.")
+      setUploadedId(track.id)
+    } catch (error) {
+      setUploadError(error instanceof AuthError ? "먼저 Google 로그인해 주세요." : error instanceof Error ? error.message : "업로드에 실패했습니다.")
+    } finally { uploadLock.current = false; setUploading(false) }
+  }
   const [prompt, setPrompt] = useState(
     "Pulsing neon synth with driving 4/4 beat, hypnotic arpeggios, and late-night Tokyo cityscape vibes for a commercial trailer",
   )
@@ -510,7 +555,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
               e.preventDefault()
               setDragging(false)
               const f = e.dataTransfer.files[0]
-              if (f) setFileName(f.name)
+              selectAudio(f)
             }}
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
               dragging
@@ -519,8 +564,9 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
                   ? "border-emerald-500/40 bg-emerald-500/5"
                   : "border-[#30363d] hover:border-[#484f58]"
             }`}
-            onClick={() => !fileName && setFileName("neon_cascade_v3.wav")}
+            onClick={() => { if (!uploading) audioInput.current?.click() }}
           >
+            <input ref={audioInput} type="file" accept=".wav,.mp3" aria-label="음원 파일" className="hidden" disabled={uploading} onClick={e => e.stopPropagation()} onChange={e => { selectAudio(e.target.files?.[0]); e.target.value = "" }} />
             {fileName ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
@@ -545,14 +591,17 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
                     {fileName}
                   </div>
                   <div className="text-xs text-[#9CA3AF] font-mono mt-0.5">
-                    44.1kHz · 16-bit · WAV · 4.2MB · 3:42
+                    {audioFile ? `${(audioFile.size / 1024 / 1024).toFixed(2)} MB` : ""}
                   </div>
                 </div>
                 <Waveform seed={42} color="#10b981" />
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
+                    if (uploading) return
                     setFileName("")
+                    setAudioFile(null)
+                    setUploadedId(null)
                   }}
                   className="text-xs text-[#9CA3AF] hover:text-white underline"
                 >
@@ -590,6 +639,11 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
             )}
           </div>
 
+          {/* Upload metadata */}
+          <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 space-y-3">
+            <label className="block text-xs text-[#9CA3AF]">음원 제목 *<input aria-label="음원 제목" value={title} onChange={e => { setTitle(e.target.value); setUploadedId(null) }} disabled={uploading} className="mt-2 w-full rounded-lg bg-[#1c2128] border border-[#30363d] p-2 text-white" /></label>
+            <label className="block text-xs text-[#9CA3AF]">작업 로그 (선택)<textarea aria-label="작업 로그" value={workLog} onChange={e => setWorkLog(e.target.value)} disabled={uploading} className="mt-2 w-full rounded-lg bg-[#1c2128] border border-[#30363d] p-2 text-white" /></label>
+          </div>
           {/* Form */}
           <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 space-y-5">
             <h3 className="text-sm font-semibold text-white">
@@ -971,14 +1025,14 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
           </div>
 
           <button
-            onClick={() => setStage("ai_checking")}
-            disabled={!fileName}
+            onClick={() => void handleUpload()}
+            disabled={uploading || !audioFile || !title.trim() || uploadedId !== null}
             className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
-            {failDemo
-              ? "AI 검증 시작 (동일 지문 BLOCK 시뮬레이션)"
-              : "AI 검증 후 온체인 Mint"}
+            {uploading ? "음원 업로드 중…" : uploadedId !== null ? "업로드 완료" : "음원 업로드"}
           </button>
+          {uploadError && <p role="alert" className="text-sm text-red-400">{uploadError}</p>}
+          {uploadedId !== null && <p role="status" className="text-sm text-emerald-400">음원 업로드 완료 · ID: {uploadedId} (AI 검증·온체인 등록 전)</p>}
         </div>
       </div>
 

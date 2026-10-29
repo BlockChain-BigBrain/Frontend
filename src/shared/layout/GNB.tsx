@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react"
+import { auth } from "../../api"
+import { AuthError, type User } from "../../auth"
 import type { Screen } from "../types/domain"
 import HowItWorksModal from "../components/HowItWorksModal"
 import WalletModal from "../../features/wallet-auth/WalletModal"
@@ -22,6 +25,25 @@ export default function GNB({
   showHowItWorks: boolean
   setShowHowItWorks: (v: boolean) => void
 }) {
+  const [user, setUser] = useState<User | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [authError, setAuthError] = useState("")
+  useEffect(() => {
+    let active = true
+    auth.me().then(value => { if (active) setUser(value) }).catch(error => {
+      if (active && !(error instanceof AuthError)) setAuthError(error.message)
+    }).finally(() => { if (active) setAuthLoading(false) })
+    return () => { active = false }
+  }, [])
+  async function logout() {
+    setAuthLoading(true)
+    setAuthError("")
+    try { await auth.logout(); setUser(null) }
+    catch (error) {
+      setUser(null)
+      setAuthError(error instanceof Error ? error.message : "로그아웃에 실패했습니다.")
+    } finally { setAuthLoading(false) }
+  }
   const navItems: { id: Screen; label: string }[] = [
     { id: "marketplace", label: "Explore" },
     { id: "upload", label: "Upload" },
@@ -70,7 +92,9 @@ export default function GNB({
           </button>
         </nav>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded bg-white hover:bg-gray-100 text-gray-800 text-xs font-medium transition-colors border border-gray-200">
+          {user ? (
+            <><span className="text-xs text-white">{user.nickname}</span><button disabled={authLoading} onClick={() => void logout()} className="px-3 py-1.5 text-xs text-[#9CA3AF]">로그아웃</button></>
+          ) : <button disabled={authLoading} onClick={() => { window.location.href = auth.loginUrl }} className="flex items-center gap-2 px-3 py-1.5 rounded bg-white hover:bg-gray-100 text-gray-800 text-xs font-medium transition-colors border border-gray-200">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -89,8 +113,8 @@ export default function GNB({
                 fill="#EA4335"
               />
             </svg>
-            구글로 3초 만에 시작하기
-          </button>
+            {authLoading ? "로그인 확인 중…" : "구글로 3초 만에 시작하기"}
+          </button>}
           {walletConnected ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#161b22] border border-[#30363d]">
               <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
@@ -109,6 +133,7 @@ export default function GNB({
         </div>
       </header>
 
+      {authError && <p role="alert" className="fixed top-14 right-6 z-50 rounded-lg bg-[#161b22] p-3 text-xs text-red-400">{authError}</p>}
       {showHowItWorks && (
         <HowItWorksModal onClose={() => setShowHowItWorks(false)} />
       )}
