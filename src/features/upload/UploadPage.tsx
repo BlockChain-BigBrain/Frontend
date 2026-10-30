@@ -426,8 +426,8 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   function selectAudio(file: File | undefined) {
     if (!file || uploadLock.current) return
     setUploadedId(null)
-    if (!/\.(mp3|wav)$/i.test(file.name) || file.size > 100 * 1024 * 1024 || file.size === 0) {
-      setUploadError("100MB 이하의 비어 있지 않은 MP3 또는 WAV 파일을 선택해 주세요.")
+    if (!/\.(mp3|wav|webm)$/i.test(file.name) || file.size > 100 * 1024 * 1024 || file.size === 0) {
+      setUploadError("100MB 이하의 비어 있지 않은 MP3, WAV 또는 WebM 파일을 선택해 주세요.")
       return
     }
     setAudioFile(file)
@@ -566,7 +566,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
             }`}
             onClick={() => { if (!uploading) audioInput.current?.click() }}
           >
-            <input ref={audioInput} type="file" accept=".wav,.mp3" aria-label="음원 파일" className="hidden" disabled={uploading} onClick={e => e.stopPropagation()} onChange={e => { selectAudio(e.target.files?.[0]); e.target.value = "" }} />
+            <input ref={audioInput} type="file" accept=".wav,.mp3,.webm" aria-label="음원 파일" className="hidden" disabled={uploading} onClick={e => e.stopPropagation()} onChange={e => { selectAudio(e.target.files?.[0]); e.target.value = "" }} />
             {fileName ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">

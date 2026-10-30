@@ -8,7 +8,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
   for (const key of ["window", "document", "localStorage", "FormData", "File", "Blob", "HTMLElement", "Event", "MouseEvent"])
     Object.defineProperty(globalThis, key, { configurable: true, value: (dom.window as any)[key] });
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  let uploaded = 0, fail = true, signedIn = true;
+  let uploaded = 0, fail = true, signedIn = true, filename = 'my-song.wav';
   const calls: string[] = [];
   const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
   globalThis.fetch = async (url, init = {}) => {
@@ -21,7 +21,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer fixture');
     assert.equal(new Headers(init.headers).has('Content-Type'), false);
     const form = init.body as FormData;
-    assert.equal((form.get('audio') as File).name, 'my-song.wav');
+    assert.equal((form.get('audio') as File).name, filename);
     assert.equal(form.get('title'), 'my-song');
     assert.equal(form.get('isPublic'), 'true');
     uploaded++;
@@ -43,6 +43,9 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
   assert.match(document.querySelector('[role=alert]')!.textContent!, /저장 실패/);
   assert.equal(document.querySelector('[role=status]'), null);
   fail = false;
+  filename = 'my-song.webm';
+  Object.defineProperty(input, 'files', { configurable: true, value: [new File(['webm fixture'], filename, { type: 'audio/webm' })] });
+  await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
   await act(async () => button().click());
   assert.equal(uploaded, 2);
   assert.match(document.querySelector('[role=status]')!.textContent!, /ID: 42/);
