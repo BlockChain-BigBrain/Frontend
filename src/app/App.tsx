@@ -45,7 +45,7 @@ export default function App() {
           chainResult={chainResult}
         />
       )}
-      {import.meta.env.DEV && (
+      {import.meta.env?.DEV && (
         <div className="fixed bottom-5 right-5 z-[120] w-[290px] rounded-xl border border-blue-500/30 bg-[#161b22]/95 p-3 shadow-2xl backdrop-blur">
           <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-blue-400">
             Dev · Chain scenario
