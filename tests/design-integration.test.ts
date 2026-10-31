@@ -13,7 +13,7 @@ test("design-v3 shows public backend tracks and requires login before wallet lin
   for (const key of ["window", "document", "localStorage", "FormData", "File", "Blob", "HTMLElement", "Event", "MouseEvent"]) {
     Object.defineProperty(globalThis, key, { configurable: true, value: (dom.window as any)[key] });
   }
-  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom does not implement HTMLDialogElement.showModal/close.\n  Object.defineProperty(dom.window.HTMLDialogElement.prototype, "showModal", { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute("open", ""); } });\n  Object.defineProperty(dom.window.HTMLDialogElement.prototype, "close", { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute("open"); } });\n  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const requests: string[] = [];
   globalThis.fetch = async (url, init = {}) => {
     const path = new URL(String(url)).pathname;
@@ -38,7 +38,7 @@ test("design-v3 shows public backend tracks and requires login before wallet lin
     assert.ok(requests.includes("/api/tracks"));
 
     await act(async () => { button("지갑 연결")!.click(); await tick(); });
-    assert.ok(document.querySelector("dialog"), "signed-out wallet click opens login");
+    assert.ok(document.querySelector("dialog[open]"), "signed-out wallet click opens login");
     assert.equal(document.querySelector('[role="dialog"][aria-label="지갑 연결"]'), null, "wallet signature modal must stay closed");
 
     await act(async () => { (document.querySelector('button[aria-label="로그인 창 닫기"]') as HTMLButtonElement).click(); });
