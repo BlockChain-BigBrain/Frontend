@@ -45,6 +45,26 @@ export function createAuthClient(baseUrl: string, request: typeof fetch = fetch,
       if (!response.ok) throw new Error('사용자 정보를 불러오지 못했습니다.');
       return (await response.json()).result;
     },
+    async passwordAuth(email: string, password: string): Promise<void> {
+      const started = generation;
+      const response = await request(`${base}/api/v1/auth/login?target=frontend`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new AuthError(typeof payload?.message === 'string' && payload.message
+          ? payload.message : '이메일 또는 비밀번호를 확인해 주세요.');
+      }
+      const payload = await response.json();
+      if (typeof payload?.result?.accessToken !== 'string' || !payload.result.accessToken) {
+        throw new Error('잘못된 인증 응답입니다.');
+      }
+      if (started !== generation) throw new AuthError('로그아웃되었습니다.');
+      accessToken = payload.result.accessToken;
+    },
     loginUrl: `${base}/api/v1/auth/login/google?target=frontend${redirectTo ? `&redirectTo=${encodeURIComponent(redirectTo)}` : ""}`,
     async logout() {
       generation++;
