@@ -27,6 +27,7 @@ export default function GNB({
   setShowHowItWorks: (v: boolean) => void
 }) {
   const [user, setUser] = useState<User | null>(null)
+  const [walletAddress, setWalletAddress] = useState("")
   const [authLoading, setAuthLoading] = useState(true)
   const [authError, setAuthError] = useState("")
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -51,9 +52,8 @@ export default function GNB({
   async function logout() {
     setAuthLoading(true)
     setAuthError("")
-    try { await auth.logout(); setUser(null) }
+    try { await auth.logout(); setUser(null); setWalletConnected(false); setWalletAddress("") }
     catch (error) {
-      setUser(null)
       setAuthError(error instanceof Error ? error.message : "로그아웃에 실패했습니다.")
     } finally { setAuthLoading(false) }
   }
@@ -132,12 +132,12 @@ export default function GNB({
             <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#161b22] border border-[#30363d]">
               <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
               <span className="text-xs font-mono text-[#e6edf3]">
-                0x3a7f...c4d2
+                {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "연결됨"}
               </span>
             </div>
           ) : (
             <button
-              onClick={() => setShowWalletModal(true)}
+              onClick={() => { if (!user) setShowLoginModal(true); else setShowWalletModal(true) }}
               className="px-4 py-1.5 rounded bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors"
             >
               지갑 연결
@@ -161,6 +161,7 @@ export default function GNB({
         <WalletModal
           setWalletConnected={setWalletConnected}
           setShowWalletModal={setShowWalletModal}
+          onConnected={setWalletAddress}
         />
       )}
     </>
