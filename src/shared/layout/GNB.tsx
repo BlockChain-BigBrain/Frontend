@@ -37,6 +37,17 @@ export default function GNB({
     }).finally(() => { if (active) setAuthLoading(false) })
     return () => { active = false }
   }, [])
+  async function passwordLogin(email: string, password: string) {
+    setAuthError("")
+    await auth.passwordAuth(email, password)
+    try {
+      const currentUser = await auth.me()
+      setUser(currentUser)
+    } catch (error) {
+      setUser(null)
+      throw error
+    }
+  }
   async function logout() {
     setAuthLoading(true)
     setAuthError("")
@@ -137,6 +148,7 @@ export default function GNB({
       {showLoginModal && (
         <LoginModal
           onClose={() => setShowLoginModal(false)}
+          onSubmit={passwordLogin}
         />
       )}
 
