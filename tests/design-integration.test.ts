@@ -13,7 +13,10 @@ test("design-v3 shows public backend tracks and requires login before wallet lin
   for (const key of ["window", "document", "localStorage", "FormData", "File", "Blob", "HTMLElement", "Event", "MouseEvent"]) {
     Object.defineProperty(globalThis, key, { configurable: true, value: (dom.window as any)[key] });
   }
-  // jsdom does not implement HTMLDialogElement.showModal/close.\n  Object.defineProperty(dom.window.HTMLDialogElement.prototype, "showModal", { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute("open", ""); } });\n  Object.defineProperty(dom.window.HTMLDialogElement.prototype, "close", { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute("open"); } });\n  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom does not implement HTMLDialogElement.showModal/close.
+  Object.defineProperty(dom.window.HTMLDialogElement.prototype, "showModal", { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute("open", ""); } });
+  Object.defineProperty(dom.window.HTMLDialogElement.prototype, "close", { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute("open"); } });
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const requests: string[] = [];
   globalThis.fetch = async (url, init = {}) => {
     const path = new URL(String(url)).pathname;
