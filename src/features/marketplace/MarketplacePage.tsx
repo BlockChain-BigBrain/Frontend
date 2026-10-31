@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { API_BASE } from "../../api/service"
 import { THRESHOLD } from "../../shared/config/constants"
 import { NETWORK } from "../../shared/config/network"
 import type { Screen } from "../../shared/types/domain"
@@ -8,6 +9,23 @@ import { tracks } from "./mockTracks"
 // ─── Marketplace ────────────────────────────────────────────────────────────────
 export default function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [search, setSearch] = useState("")
+  const [liveTracks, setLiveTracks] = useState<Array<{ id: number; title: string; registrationStatus?: string; createdAt?: string }>>([])
+  const [liveError, setLiveError] = useState("")
+  const [liveLoading, setLiveLoading] = useState(true)
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch(`${API_BASE}/api/tracks?scope=public&limit=20`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error(`음원 목록 조회 실패 (${response.status})`)
+        const data: unknown = await response.json()
+        if (!Array.isArray(data)) throw new Error("잘못된 음원 목록 응답")
+        setLiveTracks(data.filter((item): item is { id: number; title: string; registrationStatus?: string; createdAt?: string } =>
+          !!item && typeof item === "object" && typeof item.id === "number" && typeof item.title === "string"))
+      })
+      .catch(error => { if (!controller.signal.aborted) setLiveError(error instanceof Error ? error.message : "음원을 불러오지 못했습니다.") })
+      .finally(() => { if (!controller.signal.aborted) setLiveLoading(false) })
+    return () => controller.abort()
+  }, [])
   const [filter, setFilter] = useState("All")
   const genres = [
     "All",
@@ -79,6 +97,21 @@ export default function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen
           </div>
         </div>
       </div>
+      <section className="max-w-6xl mx-auto px-6 pt-8">
+        <h2 className="text-lg font-semibold text-white mb-3">실제 등록 음원 <span className="text-xs text-blue-400">Backend API</span></h2>
+        {liveLoading && <p role="status" className="text-sm text-[#9CA3AF]">서버에서 음원을 불러오는 중…</p>}
+        {liveError && <p role="alert" className="text-sm text-red-400">서버 연결 오류: {liveError}</p>}
+        {!liveLoading && !liveError && liveTracks.length === 0 && <p className="text-sm text-[#9CA3AF]">공개된 실제 음원이 아직 없습니다.</p>}
+        <div className="grid gap-3 md:grid-cols-3">
+          {liveTracks.filter(t => t.title.toLowerCase().includes(search.toLowerCase())).map(track => (
+            <article key={track.id} className="rounded-xl border border-[#30363d] bg-[#161b22] p-4">
+              <h3 className="font-medium text-white">{track.title}</h3>
+              <p className="mt-2 text-xs text-[#9CA3AF]">음원 ID: {track.id} · 등록 상태: {track.registrationStatus || "확인 중"}</p>
+              <audio controls preload="none" className="mt-3 w-full" src={`${API_BASE}/api/tracks/${track.id}/audio`} />
+            </article>
+          ))}
+        </div>
+      </section>
       <div className="border-b border-[#21262d] bg-[#0d1117]">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-6 text-xs font-mono text-[#9CA3AF]">
           {[
