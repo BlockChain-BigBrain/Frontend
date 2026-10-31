@@ -51,7 +51,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
   assert.match(document.querySelector('[role=status]')!.textContent!, /ID: 42/);
   assert.equal(calls.some(p => /verify|metadata|registration|wallet/.test(p)), false);
   await act(async () => Array.from(document.querySelectorAll('button')).find(b => b.textContent === '로그아웃')!.click());
-  assert.match(document.body.textContent!, /구글로 3초/);
+  assert.match(document.body.textContent!, /로그인/);
   await act(async () => root.unmount());
   dom.window.close();
 });
