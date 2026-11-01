@@ -3,7 +3,7 @@ import ChainResultPanel from "../chain-result/ChainResultPanel"
 import Badge from "../../shared/components/Badge"
 import PieChart from "../../shared/components/PieChart"
 import Waveform from "../../shared/components/Waveform"
-import { THRESHOLD } from "../../shared/config/constants"
+import { AI_POLICY, THRESHOLD } from "../../shared/config/constants"
 import { NETWORK } from "../../shared/config/network"
 import type { ChainResult, LicenseType, Screen } from "../../shared/types/domain"
 
@@ -57,8 +57,8 @@ function InfringementModal({ onClose }: { onClose: () => void }) {
           {[
             {
               step: "01",
-              title: "신고 접수 즉시 에스크로 동결",
-              desc: "해당 음원의 판매 수익이 즉시 에스크로 보류 상태로 전환됩니다. 신규 판매도 일시 중단됩니다.",
+              title: "신고 접수 즉시 신규 거래 제한",
+              desc: "해당 음원의 신규 라이선스 구매가 일시 중단되고 기존 거래 기록은 유지됩니다.",
               color: "#f59e0b",
             },
             {
@@ -70,7 +70,7 @@ function InfringementModal({ onClose }: { onClose: () => void }) {
             {
               step: "03",
               title: "판정 결과 집행",
-              desc: "침해 인정 시 에스크로 환불 + 음원 삭제. 무혐의 시 에스크로 해제 + 크리에이터 정산 재개.",
+              desc: "침해 인정 시 환불 절차와 음원 비공개를 검토합니다. 무혐의 시 신규 거래를 재개합니다.",
               color: "#10b981",
             },
           ].map((s) => (
@@ -99,8 +99,8 @@ function InfringementModal({ onClose }: { onClose: () => void }) {
             허위 신고 패널티
           </div>
           <div className="text-xs text-[#9CA3AF]">
-            허위 또는 악의적 신고로 판정될 경우 신고자 계정 30일 정지 및
-            에스크로 몰수될 수 있습니다.
+            허위 또는 악의적 신고로 판정될 경우 신고자 계정이 30일 정지될 수
+            있습니다.
           </div>
         </div>
         <div className="flex gap-2">
@@ -229,22 +229,22 @@ export default function DetailScreen({
                   <div className="flex items-center gap-2">
                     <Badge
                       variant={
-                        chainResult.riskVerdict === "PASS"
+                        chainResult.aiStatus === "PASS"
                           ? "verified"
-                          : chainResult.riskVerdict === "WARN"
+                          : chainResult.aiStatus === "WARN"
                             ? "warning"
-                            : chainResult.riskVerdict === "HOLD"
+                            : chainResult.aiStatus === "HOLD"
                               ? "warning"
-                            : chainResult.riskVerdict === "CHECKING"
+                            : chainResult.aiStatus === "ANALYZING"
                               ? "primary"
                               : "danger"
                       }
                     >
-                      {chainResult.riskVerdict === "CHECKING"
+                      {chainResult.aiStatus === "ANALYZING"
                         ? "검증 중"
-                        : chainResult.riskVerdict === "ERROR"
+                        : chainResult.aiStatus === "ERROR"
                           ? "검증 오류"
-                          : `${chainResult.riskVerdict}${
+                          : `${chainResult.aiStatus}${
                               chainResult.similarityScore !== undefined
                                 ? ` · 유사도 ${chainResult.similarityScore.toFixed(2)}`
                                 : ""
@@ -263,6 +263,7 @@ export default function DetailScreen({
 
             <ChainResultPanel
               result={chainResult}
+              mode="REGISTER"
               onRetry={() => undefined}
               onAppeal={() => setShowInfringement(true)}
             />
@@ -379,6 +380,16 @@ export default function DetailScreen({
                     <span>{THRESHOLD.hold.toFixed(2)}</span>
                     <span>HOLD</span>
                   </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
+                    <div className="rounded border border-[#30363d] px-2 py-1.5 text-[#9CA3AF]">
+                      AI 분석 정책 · {AI_POLICY.model}{" "}
+                      {AI_POLICY.embeddingDimensions}-dim · {AI_POLICY.metric}
+                    </div>
+                    <div className="rounded border border-[#30363d] px-2 py-1.5 text-[#9CA3AF]">
+                      계약 판정 기준 · WARN {THRESHOLD.warn.toFixed(2)} · HOLD{" "}
+                      {THRESHOLD.hold.toFixed(2)}
+                    </div>
+                  </div>
                   <div className="mt-3 text-[10px] text-[#9CA3AF]">
                     가장 비슷한 곡 TOP 3 · Void Echoes 0.31 (01:12–01:24) · Neon
                     Grid 0.18 · Synthetic Pulse 0.12
@@ -475,12 +486,9 @@ export default function DetailScreen({
                   <span className="text-[10px] text-blue-400 font-mono">
                     0x92e1...a4b3
                   </span>
-                  <a
-                    href="#"
-                    className="text-[10px] text-[#9CA3AF] hover:text-blue-400 transition-colors ml-auto whitespace-nowrap"
-                  >
-                    Polygonscan ↗
-                  </a>
+                  <span className="ml-auto whitespace-nowrap text-[10px] text-[#6B7280]">
+                    로컬 거래
+                  </span>
                 </div>
               </div>
               <div className="border-t border-[#21262d] pt-4 mb-4">
@@ -491,24 +499,25 @@ export default function DetailScreen({
                   ≈ {prices[license].usd}
                 </div>
               </div>
-              {chainResult.riskVerdict === "PASS" ||
-              chainResult.riskVerdict === "WARN" ? (
+              {chainResult.aiStatus === "PASS" ||
+              chainResult.aiStatus === "WARN" ? (
                 <button
                   onClick={() => setScreen("checkout")}
                   className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-colors"
                 >
                   라이선스 구매하기
                 </button>
-              ) : chainResult.riskVerdict === "HOLD" || chainResult.isHold ? (
+              ) : chainResult.aiStatus === "HOLD" ? (
                 <div className="space-y-2">
                   <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[10px] leading-relaxed text-amber-300">
-                    정산 보류 중, 구매 대금은 에스크로에 보관됩니다.
+                    HOLD 음원은 현재 목업 정책에서 라이선스 구매·발급이
+                    제한됩니다.
                   </div>
                   <button
-                    onClick={() => setScreen("checkout")}
-                    className="w-full rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white hover:bg-blue-600"
+                    disabled
+                    className="w-full cursor-not-allowed rounded-xl border border-[#30363d] bg-[#1c2128] py-3 text-sm font-semibold text-[#6B7280]"
                   >
-                    라이선스 구매
+                    HOLD · 구매 제한
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button className="rounded-xl border border-orange-500/30 bg-orange-500/10 py-2.5 text-xs font-medium text-orange-400">
@@ -527,7 +536,7 @@ export default function DetailScreen({
                   disabled
                   className="w-full cursor-not-allowed rounded-xl border border-[#30363d] bg-[#1c2128] py-3 text-sm font-semibold text-[#6B7280]"
                 >
-                  {chainResult.riskVerdict === "CHECKING"
+                  {chainResult.aiStatus === "ANALYZING"
                     ? "검증 완료 후 구매 가능"
                     : "검증 오류 · 구매 불가"}
                 </button>
@@ -552,7 +561,7 @@ export default function DetailScreen({
                     strokeLinecap="round"
                   />
                 </svg>
-                저작권 침해 의심 신고 (에스크로 보류)
+                저작권 침해 의심 신고 (거래 제한 요청)
               </button>
             </div>
 
@@ -561,7 +570,7 @@ export default function DetailScreen({
                 트랜잭션 정보
               </h4>
               {[
-                ["Minted", "2025-11-03"],
+                ["Registered", "2025-11-03"],
                 ["Network", NETWORK.name],
                 ["Standard", "ERC-1155"],
                 ["재판매 로열티", "10%"],

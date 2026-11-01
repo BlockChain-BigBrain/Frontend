@@ -1058,9 +1058,10 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
           <div className="max-h-[88vh] w-[700px] overflow-y-auto rounded-2xl border border-[#30363d] bg-[#161b22] p-6 shadow-2xl">
             <div
               className={`w-14 h-14 rounded-full border flex items-center justify-center mx-auto mb-4 ${
-                chainResult.mintStatus === "rejected"
+                chainResult.registrationStatus === "CONTRACT_REJECTED" ||
+                chainResult.registrationStatus === "ERROR"
                   ? "bg-red-500/10 border-red-500/20"
-                  : chainResult.isHold
+                  : chainResult.aiStatus === "HOLD"
                     ? "bg-amber-500/10 border-amber-500/20"
                     : "bg-emerald-500/10 border-emerald-500/20"
               }`}
@@ -1069,9 +1070,10 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
                 <path
                   d="M5 13L9 17L19 7"
                   stroke={
-                    chainResult.mintStatus === "rejected"
+                    chainResult.registrationStatus === "CONTRACT_REJECTED" ||
+                    chainResult.registrationStatus === "ERROR"
                       ? "#ef4444"
-                      : chainResult.isHold
+                      : chainResult.aiStatus === "HOLD"
                         ? "#f59e0b"
                         : "#10b981"
                   }
@@ -1083,17 +1085,20 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
             </div>
             <div className="mb-5 text-center">
               <h3 className="text-base font-semibold text-white">
-                {chainResult.mintStatus === "rejected"
+                {chainResult.registrationStatus === "CONTRACT_REJECTED" ||
+                chainResult.registrationStatus === "ERROR"
                   ? "음원 등록 실패"
-                  : chainResult.isHold
-                    ? "등록 완료 (정산 대기 중)"
+                  : chainResult.aiStatus === "HOLD"
+                    ? chainResult.onchainTrackId !== undefined
+                      ? "HOLD 기록 완료 · 구매 제한"
+                      : "HOLD · 등록 보류"
                     : "음원 등록 완료"}
               </h3>
               <p className="mt-1 text-sm text-[#9CA3AF]">
-                {NETWORK.name} ERC-1155 민팅 상태를 확인하세요.
+                {NETWORK.name} 음원 등록 상태를 확인하세요.
               </p>
             </div>
-            <ChainResultPanel result={chainResult} />
+            <ChainResultPanel result={chainResult} mode="REGISTER" />
             <button
               onClick={handleReset}
               className="mt-5 w-full py-2.5 rounded-xl bg-[#1c2128] hover:bg-[#21262d] border border-[#30363d] text-white text-sm font-medium transition-colors"

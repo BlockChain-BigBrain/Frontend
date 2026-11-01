@@ -145,7 +145,7 @@ export default function TrackCard({
               </div>
             )}
           </div>
-          {(isPass || isWarn || isHold) && (
+          {(isPass || isWarn) && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -157,7 +157,14 @@ export default function TrackCard({
             </button>
           )}
           {isHold && (
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed rounded border border-[#30363d] bg-[#1c2128] px-2 py-1.5 text-[10px] text-[#6B7280]"
+              >
+                구매 제한
+              </button>
               <button
                 onClick={(e) => e.stopPropagation()}
                 className="px-2 py-1.5 rounded border border-orange-500/30 text-orange-400 text-[10px]"
@@ -198,6 +205,9 @@ export default function TrackCard({
               <span>{THRESHOLD.warn.toFixed(2)}</span>
               <span>{THRESHOLD.hold.toFixed(2)}</span>
               <span>HOLD</span>
+            </div>
+            <div className="mt-1 text-right text-[8px] text-[#6B7280]">
+              계약 판정 기준
             </div>
           </div>
         )}

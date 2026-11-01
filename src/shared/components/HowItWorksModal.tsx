@@ -93,7 +93,7 @@ export default function HowItWorksModal({ onClose }: { onClose: () => void }) {
             <li>유사도는 음향적 비교이며 법적 표절 판단이 아닙니다.</li>
             <li>플랫폼에 등록된 곡과만 비교합니다.</li>
             <li>
-              상용화 단계에서는 라이선스 몰수·정산 보류 관련 약관을 강화할
+              상용화 단계에서는 HOLD 거래 제한과 이의 제기 관련 약관을 강화할
               예정입니다.
             </li>
           </ul>
@@ -101,7 +101,7 @@ export default function HowItWorksModal({ onClose }: { onClose: () => void }) {
         <div className="mt-4 pt-4 border-t border-[#21262d]">
           <div className="flex items-center gap-2 text-xs text-[#9CA3AF] font-mono">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-            Polygon Network (Amoy) · Web3Auth AA 지갑 · LAION-CLAP
+            Hardhat Local (31337) · ETH · Web3Auth AA 지갑 · LAION-CLAP
             gatekeeper-v2.1
           </div>
         </div>
