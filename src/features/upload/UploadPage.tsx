@@ -454,7 +454,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
       if (!Number.isInteger(track.id) || track.id <= 0) throw new Error("서버의 업로드 응답을 확인해 주세요.")
       setUploadedId(track.id)
     } catch (error) {
-      setUploadError(error instanceof AuthError ? "먼저 Google 로그인해 주세요." : error instanceof Error ? error.message : "업로드에 실패했습니다.")
+      setUploadError(error instanceof AuthError ? "먼저 로그인해 주세요." : error instanceof Error ? error.message : "업로드에 실패했습니다.")
     } finally { uploadLock.current = false; setUploading(false) }
   }
   const [prompt, setPrompt] = useState(
