@@ -65,7 +65,7 @@ export default function App() {
         <CheckoutScreen
           setScreen={setScreen}
           chainResult={chainResult}
-          onRecheckResult={recheckPurchaseResult}
+          onRecheckResult={recheckMockPurchaseResult}
         />
       )}
       {screen === "certificate" && (
@@ -74,7 +74,7 @@ export default function App() {
           chainResult={chainResult}
         />
       )}
-      {import.meta.env.DEV && <div className="fixed bottom-5 right-5 z-[120] w-[360px] overflow-hidden rounded-xl border border-blue-500/30 bg-[#161b22]/95 shadow-2xl backdrop-blur">
+      {import.meta.env?.DEV && <div className="fixed bottom-5 right-5 z-[120] w-[360px] overflow-hidden rounded-xl border border-blue-500/30 bg-[#161b22]/95 shadow-2xl backdrop-blur">
         <button
           type="button"
           onClick={() => setScenarioPanelOpen((open) => !open)}
