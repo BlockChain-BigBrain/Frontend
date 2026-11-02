@@ -30,7 +30,7 @@ export default function App() {
     setChainResult(SCENARIOS[id].result)
   }
 
-  const recheckPurchaseResult = () => {
+  const recheckMockPurchaseResult = () => {
     setChainResult((current) => resolveConfirmingPurchase(current))
   }
   const scenarioLabel =
@@ -58,7 +58,7 @@ export default function App() {
       {screen === "dashboard" && (
         <DashboardScreen
           chainResult={chainResult}
-          onRecheckResult={recheckPurchaseResult}
+          onRecheckResult={recheckMockPurchaseResult}
         />
       )}
       {screen === "checkout" && (
@@ -74,7 +74,7 @@ export default function App() {
           chainResult={chainResult}
         />
       )}
-      <div className="fixed bottom-5 right-5 z-[120] w-[360px] overflow-hidden rounded-xl border border-blue-500/30 bg-[#161b22]/95 shadow-2xl backdrop-blur">
+      {import.meta.env.DEV && <div className="fixed bottom-5 right-5 z-[120] w-[360px] overflow-hidden rounded-xl border border-blue-500/30 bg-[#161b22]/95 shadow-2xl backdrop-blur">
         <button
           type="button"
           onClick={() => setScenarioPanelOpen((open) => !open)}
@@ -122,7 +122,7 @@ export default function App() {
             </p>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   )
 }
