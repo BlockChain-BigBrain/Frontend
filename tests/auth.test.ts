@@ -33,7 +33,6 @@ test('first visit stays signed out when only a Swagger session exists', async ()
  });
  await assert.rejects(client.me(),AuthError);
  assert.equal(calls.length,1);
- assert.equal(client.loginUrl,'http://localhost:3000/api/v1/auth/login/google?target=frontend');
 });
 
 test('multipart upload preserves audio and title with Bearer authentication', async () => {
@@ -54,9 +53,12 @@ test('multipart upload preserves audio and title with Bearer authentication', as
  assert.equal((await client.apiFetch('/api/tracks', {method:'POST', body:form})).status, 201);
 });
 
-test('Google login carries the GitHub Pages return path', () => {
- const client = createAuthClient('https://api.example.test', fetch, '/Frontend/?login=success');
- const url = new URL(client.loginUrl);
- assert.equal(url.searchParams.get('redirectTo'), '/Frontend/?login=success');
- assert.equal(url.searchParams.get('target'), 'frontend');
+test('password login sends credentials to local auth endpoint', async () => {
+ const client=createAuthClient('https://api.example.test',async (url,init) => {
+  assert.equal(String(url),'https://api.example.test/api/v1/auth/login?target=frontend');
+  assert.equal(init?.method,'POST');
+  assert.deepEqual(JSON.parse(String(init?.body)),{email:'creator@example.test',password:'test-password'});
+  return json({result:{accessToken:'local-token'}});
+ });
+ await client.passwordAuth('creator@example.test','test-password');
 });
