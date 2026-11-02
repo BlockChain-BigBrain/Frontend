@@ -244,7 +244,7 @@ export default function ChainResultPanel({
                 onClick={onRecheck}
                 className="rounded border border-blue-500/30 px-2 py-1 text-[9px] text-blue-400 hover:bg-blue-500/10"
               >
-                결과 재확인
+                목업 결과 재확인 (실제 조회 아님)
               </button>
             )}
           </div>
