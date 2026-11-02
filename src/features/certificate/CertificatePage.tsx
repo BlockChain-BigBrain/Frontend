@@ -1,6 +1,6 @@
 import Badge from "../../shared/components/Badge"
 import Waveform from "../../shared/components/Waveform"
-import { THRESHOLD } from "../../shared/config/constants"
+import { AI_POLICY, THRESHOLD } from "../../shared/config/constants"
 import { NETWORK } from "../../shared/config/network"
 import type { ChainResult, Screen } from "../../shared/types/domain"
 
@@ -29,7 +29,7 @@ export default function CertificateScreen({
       num: "03",
       title: "벡터 DB 유사도 비교",
       desc: "Cosine Similarity 연산 완료 (1,247건)",
-      detail: `등록 음원 벡터 DB (온체인 CID 앵커) · 최고 유사도: 0.31 · HOLD 임계값: ${THRESHOLD.hold.toFixed(2)}`,
+      detail: `${AI_POLICY.comparisonScope} (온체인 CID 앵커) · 최고 유사도: 0.31 · 계약 HOLD 기준: ${THRESHOLD.hold.toFixed(2)}`,
     },
   ]
   const top3 = [
@@ -72,8 +72,8 @@ export default function CertificateScreen({
               <span>
                 TX:{" "}
                 <span className="text-blue-400">
-                  {chainResult.txHash
-                    ? `${chainResult.txHash.slice(0, 8)}...${chainResult.txHash.slice(-4)}`
+                  {chainResult.purchaseTxHash
+                    ? `${chainResult.purchaseTxHash.slice(0, 8)}...${chainResult.purchaseTxHash.slice(-4)}`
                     : "—"}
                 </span>
               </span>
@@ -107,15 +107,12 @@ export default function CertificateScreen({
             <div className="flex items-center gap-2">
               <Badge
                 variant={
-                  chainResult.riskVerdict === "WARN" ? "warning" : "verified"
+                  chainResult.aiStatus === "WARN" ? "warning" : "verified"
                 }
               >
-                {chainResult.riskVerdict} ·{" "}
+                {chainResult.aiStatus} ·{" "}
                 {chainResult.similarityScore?.toFixed(2) ?? "—"}
               </Badge>
-              {chainResult.isHold && (
-                <Badge variant="warning">정산 대기 중</Badge>
-              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-3">
@@ -128,8 +125,8 @@ export default function CertificateScreen({
               ["발급 시각", "2026-01-13 09:21 UTC"],
               [
                 "트랜잭션 해시",
-                chainResult.txHash
-                  ? `${chainResult.txHash.slice(0, 8)}...${chainResult.txHash.slice(-4)}`
+                chainResult.purchaseTxHash
+                  ? `${chainResult.purchaseTxHash.slice(0, 8)}...${chainResult.purchaseTxHash.slice(-4)}`
                   : "—",
               ],
               ["IPFS", "QmLf3x7...w9Kp"],
@@ -343,7 +340,7 @@ export default function CertificateScreen({
               {[
                 ["검증자 서명", "0x8f3a9c2e1b7d4f6a...d7e1 (EIP-712)"],
                 ["모델 버전", "gatekeeper-v2.1 · LAION-CLAP-2024"],
-                ["검증 해시 온체인", "0x92e1a4b3...f7c8 (Polygonscan Amoy ↗)"],
+                ["검증 해시 온체인", "0x92e1a4b3...f7c8 (Hardhat Local)"],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center gap-3">
                   <span className="text-[10px] text-[#9CA3AF] font-mono w-32 flex-shrink-0">
@@ -359,7 +356,12 @@ export default function CertificateScreen({
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#161b22] border border-[#21262d] hover:border-[#30363d] text-sm text-white font-medium transition-colors">
+          <button
+            type="button"
+            disabled
+            title="Hardhat Local에는 공개 탐색기가 없습니다"
+            className="flex cursor-not-allowed items-center gap-2 rounded-xl border border-[#21262d] bg-[#161b22] px-4 py-2.5 text-sm font-medium text-[#6B7280]"
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
                 d="M7 1v8M4 6l3 3 3-3M2 11h10"
@@ -381,7 +383,7 @@ export default function CertificateScreen({
                 strokeLinejoin="round"
               />
             </svg>
-            Amoy 탐색기에서 보기
+            로컬 네트워크 · 탐색기 없음
           </button>
           <button
             onClick={() => setScreen("marketplace")}

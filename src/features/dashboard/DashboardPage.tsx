@@ -6,7 +6,13 @@ import { NETWORK } from "../../shared/config/network"
 import type { ChainResult } from "../../shared/types/domain"
 import { initialTxns, myTracks } from "./mockDashboard"
 
-export default function DashboardScreen({ chainResult }: { chainResult: ChainResult }) {
+export default function DashboardScreen({
+  chainResult,
+  onRecheckResult,
+}: {
+  chainResult: ChainResult
+  onRecheckResult: () => void
+}) {
   const [totalEarned, setTotalEarned] = useState(594)
   const [txns, setTxns] = useState(initialTxns)
   const [animated, setAnimated] = useState(false)
@@ -14,7 +20,9 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
   const [trackTab, setTrackTab] =
     useState<"all" | "pass" | "checking" | "hold">("all")
   const [showAppeal, setShowAppeal] = useState(false)
-  const [expandedTxn, setExpandedTxn] = useState<number | null>(0)
+  const [selectedTxnIndex, setSelectedTxnIndex] = useState<number | null>(null)
+  const selectedTxn =
+    selectedTxnIndex === null ? null : txns[selectedTxnIndex]
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -81,6 +89,81 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
 
   return (
     <div className="pt-14 min-h-screen">
+      {selectedTxn && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 px-6 backdrop-blur-sm"
+          onClick={() => setSelectedTxnIndex(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transaction-detail-title"
+            className="max-h-[86vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#30363d] bg-[#161b22] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#30363d] bg-[#161b22] px-6 py-5">
+              <div>
+                <h3
+                  id="transaction-detail-title"
+                  className="text-base font-semibold text-white"
+                >
+                  거래 상세
+                </h3>
+                <p className="mt-1 text-xs text-[#9CA3AF]">
+                  {selectedTxn.track} · {selectedTxn.date}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTxnIndex(null)}
+                className="rounded-lg border border-[#30363d] px-3 py-1.5 text-xs text-[#9CA3AF] hover:text-white"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="space-y-4 p-6">
+              <div className="grid grid-cols-2 gap-3 rounded-xl border border-[#21262d] bg-[#0d1117] p-4 sm:grid-cols-4">
+                {[
+                  ["구매자 지갑", selectedTxn.buyer],
+                  ["라이선스", selectedTxn.license],
+                  ["내 지분", selectedTxn.split],
+                  ["내 수령액", selectedTxn.earned],
+                  ["네트워크", `${NETWORK.name} · ${NETWORK.chainId}`],
+                  ["통화", NETWORK.currencySymbol],
+                  [
+                    "정산 상태",
+                    selectedTxn.status === "restricted"
+                      ? "HOLD 구매 제한"
+                      : "정산 완료",
+                  ],
+                  ["내 역할", selectedTxn.role === "voice" ? "보이스" : "크리에이터"],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <div className="text-[10px] text-[#6B7280]">{label}</div>
+                    <div className="mt-1 break-all text-xs font-medium text-white">
+                      {value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <ChainResultPanel
+                result={chainResult}
+                mode="PURCHASE"
+                compact
+                onRecheck={onRecheckResult}
+                onAppeal={() => {
+                  setSelectedTxnIndex(null)
+                  setShowAppeal(true)
+                }}
+              />
+              <p className="text-[10px] text-[#6B7280]">
+                목업 데이터이며 실제 컨트랙트 조회나 백엔드 요청은 발생하지
+                않습니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       {showAppeal && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
@@ -111,7 +194,7 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
               생성 기록·증빙 파일 업로드
             </div>
             <p className="text-[10px] text-[#6B7280] mb-5">
-              보류된 금액은 아직 지급되지 않은 컨트랙트 잔액입니다.
+              제출 내용은 HOLD 판정 재검토를 위한 목업 증빙입니다.
             </p>
             <button
               onClick={() => setShowAppeal(false)}
@@ -176,7 +259,7 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[
             ["정산 완료", `${totalEarned} ${NETWORK.currencySymbol}`, "12건"],
-            ["에스크로 보류 중", `10 ${NETWORK.currencySymbol}`, "HOLD 1건"],
+            ["HOLD 구매 제한", "1개 음원", "라이선스 발급 차단"],
             ["검토 중인 트랙", "1개", "기한 예시 14일"],
           ].map(([label, value, sub], i) => (
             <div
@@ -203,13 +286,12 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-white">
-                  HOLD 처리 현황 · Void Echoes
+                  HOLD 검토 현황 · Void Echoes
                 </h3>
                 <Badge variant="warning">유사도 0.91</Badge>
               </div>
               <p className="text-xs text-[#9CA3AF] mt-1">
-                정산 10 {NETWORK.currencySymbol}이 에스크로에 보류되어 검토
-                중입니다.
+                온체인 등록 기록은 유지되며 라이선스 구매·발급이 제한됩니다.
               </p>
             </div>
             <button
@@ -331,7 +413,7 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
                       <Badge variant="warning">⏳ 검증 중</Badge>
                     )}
                     {t.status === "hold" && (
-                      <Badge variant="warning">정산 대기 중</Badge>
+                      <Badge variant="warning">구매 제한</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-xs text-[#9CA3AF] font-mono">
@@ -387,7 +469,7 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
                 <Fragment key={`${tx.date}-${tx.buyer}-${i}`}>
                   <tr
                     className={`border-b border-[#21262d] transition-colors ${
-                      tx.status === "frozen"
+                      tx.status === "restricted"
                         ? "bg-amber-500/5"
                         : i === 0 && justBought
                           ? "bg-emerald-500/5"
@@ -427,9 +509,9 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
                       {tx.split}
                     </td>
                     <td className="px-5 py-3">
-                      {tx.status === "frozen" ? (
+                      {tx.status === "restricted" ? (
                         <span className="text-xs font-mono font-semibold text-amber-400">
-                          ⏸ {tx.earned} 동결
+                          구매 제한
                         </span>
                       ) : (
                         <span className="text-xs font-mono font-semibold text-emerald-400">
@@ -440,39 +522,27 @@ export default function DashboardScreen({ chainResult }: { chainResult: ChainRes
                     </td>
                     <td className="px-5 py-3">
                       <button
-                        onClick={() =>
-                          setExpandedTxn(expandedTxn === i ? null : i)
-                        }
-                        className="text-left"
+                        type="button"
+                        onClick={() => setSelectedTxnIndex(i)}
+                        className="rounded-lg border border-[#30363d] px-2.5 py-1.5 text-left hover:border-blue-500/50"
                       >
                         <div
                           className={`text-[10px] font-medium ${
-                            tx.status === "frozen"
+                            tx.status === "restricted"
                               ? "text-orange-400"
                               : "text-emerald-400"
                           }`}
                         >
-                          {tx.status === "frozen"
-                            ? "정산 대기 중"
+                          {tx.status === "restricted"
+                            ? "HOLD 제한"
                             : "정산 완료"}
                         </div>
                         <div className="text-[9px] font-mono text-blue-400 mt-0.5">
-                          온체인 결과 {expandedTxn === i ? "접기 ↑" : "보기 ↓"}
+                          거래 상세 보기
                         </div>
                       </button>
                     </td>
                   </tr>
-                  {expandedTxn === i && (
-                    <tr className="border-b border-[#30363d] bg-[#0d1117]">
-                      <td colSpan={8} className="px-5 py-4">
-                        <ChainResultPanel
-                          result={chainResult}
-                          compact
-                          onAppeal={() => setShowAppeal(true)}
-                        />
-                      </td>
-                    </tr>
-                  )}
                 </Fragment>
               ))}
             </tbody>

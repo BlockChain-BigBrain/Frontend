@@ -83,6 +83,6 @@ export const tracks: TrackData[] = [
     contributors: 2,
     date: "2026-01-11",
     similarity: 0.93,
-    note: "'Orion Drift'와 음향적으로 유사합니다. 정산이 보류되어 검토 중입니다.",
+    note: "'Orion Drift'와 음향적으로 유사합니다. 온체인 기록 후 구매가 제한됩니다.",
   },
 ]

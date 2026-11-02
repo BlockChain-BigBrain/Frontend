@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { API_BASE } from "../../api/service"
-import { THRESHOLD } from "../../shared/config/constants"
+import { AI_POLICY, THRESHOLD } from "../../shared/config/constants"
 import { NETWORK } from "../../shared/config/network"
 import type { Screen } from "../../shared/types/domain"
 import TrackCard from "./TrackCard"
@@ -171,20 +171,25 @@ export default function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen
             <b className="text-amber-400">WARN</b> 구매자 확인 필요
           </span>
           <span>
-            <b className="text-orange-400">HOLD</b> 정산 보류(에스크로)
+            <b className="text-orange-400">HOLD</b> 구매·발급 제한
           </span>
           <span className="ml-auto font-mono">
             기준 {THRESHOLD.warn.toFixed(2)} / {THRESHOLD.hold.toFixed(2)} ·
             예시 데이터
           </span>
         </div>
+        <p className="-mt-2 mb-3 text-right text-[9px] text-[#6B7280]">
+          AI 분석 정책 {AI_POLICY.model} · {AI_POLICY.embeddingDimensions}-dim · {AI_POLICY.metric}
+        </p>
         <div className="grid grid-cols-3 gap-4">
           {filtered.map((track) => (
             <TrackCard
               key={track.id}
               track={track}
               onClick={() => setScreen("detail")}
-              onBuy={() => setScreen("checkout")}
+              onBuy={() => {
+                if (track.status !== "hold") setScreen("checkout")
+              }}
             />
           ))}
         </div>

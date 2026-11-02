@@ -1,49 +1,79 @@
 import { useState } from "react"
-import { THRESHOLD } from "../../shared/config/constants"
-import type { ChainResult, RejectReason } from "../../shared/types/domain"
-import { NETWORK } from "../../shared/config/network"
+import { HOLD_POLICY, MOCK_NETWORK, THRESHOLD } from "../../shared/config/constants"
+import type {
+  ChainResult,
+  FailureReason,
+  TransactionStatus,
+} from "../../shared/types/domain"
 
-const REJECT_MESSAGES: Record<RejectReason, {
-  title: string
-  message: string
-  tone: "red" | "orange" | "gray"
-}> = {
-  INVALID_AI_SIGNATURE: {
-    title: "Invalid AI Verification Signature",
+export type ChainResultMode = "REGISTER" | "PURCHASE"
+
+const FAILURE_MESSAGES: Record<
+  FailureReason,
+  { title: string; message: string }
+> = {
+  USER_CANCELLED: {
+    title: "사용자 승인 취소",
+    message: "지갑 승인 전에 사용자가 요청을 취소했습니다. 거래 해시는 없습니다.",
+  },
+  AI_SIGNATURE_MISMATCH: {
+    title: "검증 서버 서명 불일치",
     message:
-      "AI 검증자 서명이 올바르지 않아 민팅이 거부되었습니다. 서명이 위조되었거나 변조되었을 수 있습니다.",
-    tone: "red",
+      "EIP-712 검증 서명이 일치하지 않아 거래를 전송하지 않았습니다.",
   },
   SIGNATURE_EXPIRED: {
     title: "서명 만료",
-    message: "검증 서명의 유효 시간이 지났습니다. 다시 검증을 요청해 주세요.",
-    tone: "orange",
+    message: "검증 서명의 유효 시간이 지나 거래를 전송하지 않았습니다.",
   },
-  NONCE_ALREADY_USED: {
-    title: "중복 요청",
-    message: "이미 사용된 요청입니다.",
-    tone: "orange",
+  HOLD_PURCHASE_RESTRICTED: {
+    title: "HOLD 구매 제한",
+    message: "HOLD 음원은 목업 정책상 라이선스 구매·발급을 진행하지 않습니다.",
+  },
+  PAYMENT_AMOUNT_MISMATCH: {
+    title: "결제 금액 불일치",
+    message: "요청 금액과 계약의 라이선스 가격이 일치하지 않습니다.",
   },
   DUPLICATE_FINGERPRINT: {
     title: "동일 지문 감지",
-    message: "이미 등록된 음원과 같은 지문입니다.",
-    tone: "red",
-  },
-  WALLET_REJECTED: {
-    title: "지갑에서 거부됨",
-    message: "사용자가 지갑에서 트랜잭션을 거부했습니다.",
-    tone: "gray",
-  },
-  WRONG_NETWORK: {
-    title: "네트워크 불일치",
-    message: "올바른 네트워크로 전환해 주세요.",
-    tone: "orange",
+    message: "이미 등록된 음원과 같은 지문이 확인되어 등록을 진행하지 않습니다.",
   },
   CONTRACT_REVERT: {
-    title: "컨트랙트 실행 실패",
-    message: "컨트랙트에서 거부되었습니다.",
-    tone: "red",
+    title: "기타 계약 실행 오류",
+    message: "전송된 거래가 계약 실행 중 거부되었습니다.",
   },
+  SERVER_ERROR: {
+    title: "검증 서버 오류",
+    message: "분석 결과를 확정하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  },
+}
+
+const AI_LABELS = {
+  NOT_ANALYZED: "미분석",
+  ANALYZING: "분석 중",
+  PASS: "PASS",
+  WARN: "WARN",
+  HOLD: "HOLD",
+  BLOCK: "BLOCK",
+  ERROR: "분석 오류",
+} as const
+
+const SIGNATURE_LABELS = {
+  NOT_REQUESTED: "미요청",
+  RECEIVED: "서명 수신",
+  VERIFIED: "검증 확인 · 목업",
+  FAILED: "검증 실패",
+} as const
+
+const TRANSACTION_LABELS: Record<TransactionStatus, string> = {
+  NOT_SENT: "미전송",
+  AWAITING_APPROVAL: "승인 대기",
+  SUBMITTED: "전송됨",
+  CONFIRMING: "확인 대기",
+  SUCCESS: "성공",
+  POLICY_BLOCKED: "정책상 진행 제한",
+  USER_CANCELLED: "사용자 취소",
+  CONTRACT_REJECTED: "계약 거부",
+  ERROR: "오류",
 }
 
 function ValueBadge({
@@ -62,7 +92,7 @@ function ValueBadge({
   }
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-medium font-mono ${styles[tone]}`}
+      className={`inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium font-mono ${styles[tone]}`}
     >
       {children}
     </span>
@@ -91,39 +121,66 @@ function PanelRow({
 
 export default function ChainResultPanel({
   result,
+  mode,
   compact = false,
   onRetry,
+  onRecheck,
   onAppeal,
 }: {
   result: ChainResult
+  mode: ChainResultMode
   compact?: boolean
   onRetry?: () => void
+  onRecheck?: () => void
   onAppeal?: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  const reason = result.rejectReason
-    ? REJECT_MESSAGES[result.rejectReason]
-    : null
-  const hash =
-    result.mintStatus === "success" && result.txHash ? result.txHash : undefined
+  const [showTransaction, setShowTransaction] = useState(false)
+  const isHold = result.aiStatus === "HOLD"
+  const transactionStatus =
+    mode === "REGISTER" ? result.registrationStatus : result.purchaseStatus
+  const transactionPhase =
+    mode === "REGISTER"
+      ? result.registrationTxPhase
+      : result.purchaseTxPhase
+  const hasPreviousRegistration =
+    mode === "PURCHASE" &&
+    result.registrationStatus === "SUCCESS" &&
+    result.registrationTxPhase === "POST_SUBMISSION" &&
+    result.registrationTxHash !== undefined &&
+    result.onchainTrackId !== undefined
+  const failureReason =
+    result.failureTarget === "BOTH" || result.failureTarget === mode
+      ? result.failureReason
+      : undefined
+  const reason = failureReason ? FAILURE_MESSAGES[failureReason] : null
+  const modeHash =
+    mode === "REGISTER" ? result.registrationTxHash : result.purchaseTxHash
+  const hash = transactionPhase === "POST_SUBMISSION" ? modeHash : undefined
   const shortenedHash = hash ? `${hash.slice(0, 10)}…${hash.slice(-8)}` : "—"
-  const scoreHidden = result.rejectReason === "DUPLICATE_FINGERPRINT"
   const score =
     result.similarityScore === undefined
       ? null
       : Math.max(0, Math.min(1, result.similarityScore))
-  const verdictTone =
-    result.riskVerdict === "PASS"
+  const aiTone =
+    result.aiStatus === "PASS"
       ? "green"
-      : result.riskVerdict === "WARN"
+      : result.aiStatus === "WARN" || result.aiStatus === "HOLD"
         ? "orange"
-        : result.riskVerdict === "HOLD"
+        : result.aiStatus === "BLOCK" || result.aiStatus === "ERROR"
+          ? "red"
+          : "blue"
+  const transactionTone =
+    transactionStatus === "SUCCESS"
+      ? "green"
+      : transactionStatus === "CONTRACT_REJECTED" ||
+          transactionStatus === "ERROR"
+        ? "red"
+        : transactionStatus === "POLICY_BLOCKED"
           ? "orange"
-          : result.riskVerdict === "BLOCK"
-            ? "red"
-          : result.riskVerdict === "CHECKING"
-            ? "blue"
-            : "gray"
+        : transactionStatus === "USER_CANCELLED"
+          ? "gray"
+          : "blue"
 
   const copyHash = async () => {
     if (!hash) return
@@ -133,243 +190,313 @@ export default function ChainResultPanel({
   }
 
   return (
-    <section
-      className={`overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117] ${
-        compact ? "" : "shadow-xl shadow-black/10"
-      }`}
-    >
-      <div className="flex items-center justify-between border-b border-[#30363d] bg-[#1c2128] px-4 py-3">
-        <div>
-          <h3 className="text-xs font-semibold text-white">
-            온체인 검증 · 민팅 결과
-          </h3>
-          <p className="mt-0.5 text-[9px] font-mono text-[#6B7280]">
-            EIP-712 · ERC-1155 · {NETWORK.name}
-          </p>
-        </div>
-        <ValueBadge tone={verdictTone}>
-          {result.riskVerdict === "CHECKING" && (
-            <span className="h-2.5 w-2.5 animate-spin rounded-full border border-blue-400 border-t-transparent" />
-          )}
-          {result.riskVerdict === "HOLD"
-            ? "HOLD · 정산 보류"
-            : result.riskVerdict === "BLOCK"
-              ? "BLOCK · 동일 지문"
-              : result.riskVerdict === "ERROR"
-                ? "검증 오류, 재시도"
-                : result.riskVerdict === "CHECKING"
-                  ? "검증 중"
-                  : result.riskVerdict}
-        </ValueBadge>
-      </div>
-
-      <PanelRow
-        label="EIP-712 Signature Verified"
-        description="정상 AI 검증자 서명 확인"
+    <>
+      <section
+        className={`overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117] ${
+          compact ? "" : "shadow-xl shadow-black/10"
+        }`}
       >
-        {result.signatureVerified === true ? (
-          <ValueBadge tone="green">✓ Verified</ValueBadge>
-        ) : result.signatureVerified === false ? (
-          <ValueBadge tone="red">× Not Verified</ValueBadge>
-        ) : (
-          <ValueBadge>대기 중</ValueBadge>
-        )}
-      </PanelRow>
-      <PanelRow label="Mint Success" description="민팅 성공">
-        <ValueBadge tone={result.mintStatus === "success" ? "green" : "gray"}>
-          {result.mintStatus === "success" ? "✓ Mint Success" : "비활성"}
-        </ValueBadge>
-      </PanelRow>
-      <PanelRow label="Mint Rejected" description="민팅 거부">
-        <ValueBadge tone={result.mintStatus === "rejected" ? "red" : "gray"}>
-          {result.mintStatus === "rejected" ? "× Mint Rejected" : "비활성"}
-        </ValueBadge>
-      </PanelRow>
-      <PanelRow
-        label="Invalid AI Verification Signature"
-        description="가짜 서명 실패 사유"
-      >
-        {reason ? (
-          <div
-            className={`w-full rounded-lg border p-3 text-left ${
-              reason.tone === "red"
-                ? "border-red-500/30 bg-red-500/5"
-                : reason.tone === "orange"
-                  ? "border-amber-500/30 bg-amber-500/5"
-                  : "border-[#30363d] bg-[#161b22]"
-            }`}
-          >
-            <div
-              className={`text-xs font-semibold ${
-                reason.tone === "red"
-                  ? "text-red-400"
-                  : reason.tone === "orange"
-                    ? "text-amber-400"
-                    : "text-[#9CA3AF]"
-              }`}
-            >
-              {reason.title}
-            </div>
-            <p className="mt-1 text-[10px] leading-relaxed text-[#9CA3AF]">
-              {reason.message}
+        <div className="flex items-center justify-between border-b border-[#30363d] bg-[#1c2128] px-4 py-3">
+          <div>
+            <h3 className="text-xs font-semibold text-white">
+              {mode === "REGISTER" ? "음원 등록 결과" : "라이선스 발급 결과"}
+            </h3>
+            <p className="mt-0.5 text-[9px] font-mono text-[#6B7280]">
+              {MOCK_NETWORK.name} · Chain ID {MOCK_NETWORK.chainId} ·{" "}
+              {MOCK_NETWORK.currencySymbol}
             </p>
-            {result.rejectReason === "CONTRACT_REVERT" &&
-              result.rejectDetail && (
-                <details className="mt-2 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5">
-                  <summary className="cursor-pointer text-[9px] text-[#9CA3AF]">
-                    컨트랙트 원문 보기
-                  </summary>
-                  <code className="mt-1 block break-all text-[9px] text-red-300">
-                    {result.rejectDetail}
-                  </code>
-                </details>
-              )}
-            <button
-              onClick={
-                result.rejectReason === "DUPLICATE_FINGERPRINT"
-                  ? onAppeal
-                  : onRetry
-              }
-              className="mt-2 rounded border border-[#30363d] bg-[#1c2128] px-2 py-1 text-[10px] font-medium text-white hover:border-[#484f58]"
-            >
-              {result.rejectReason === "DUPLICATE_FINGERPRINT"
-                ? "이의 제기"
-                : "다시 시도"}
-            </button>
           </div>
-        ) : (
-          <span className="text-xs font-mono text-[#6B7280]">—</span>
-        )}
-      </PanelRow>
-      <PanelRow label="Transaction Hash" description="민팅 성공 트랜잭션 해시">
-        {hash ? (
-          <div className="flex min-w-0 items-center gap-1.5">
-            <code className="truncate text-[10px] text-blue-400">
-              {shortenedHash}
-            </code>
-            <button
-              onClick={copyHash}
-              className="rounded border border-[#30363d] px-1.5 py-1 text-[9px] text-[#9CA3AF] hover:text-white"
-              title="트랜잭션 해시 복사"
-            >
-              {copied ? "복사됨" : "복사"}
-            </button>
-            {NETWORK.explorerTxUrl ? (
-              <a
-                href={NETWORK.explorerTxUrl(hash)}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded border border-blue-500/30 px-1.5 py-1 text-[9px] text-blue-400 hover:bg-blue-500/10"
-              >
-                탐색기 ↗
-              </a>
-            ) : (
+          <ValueBadge tone={aiTone}>{AI_LABELS[result.aiStatus]}</ValueBadge>
+        </div>
+        <div className="border-b border-blue-500/20 bg-blue-500/5 px-4 py-2 text-[9px] text-blue-300">
+          시나리오 미리보기 · 실제 거래 아님
+        </div>
+
+        <PanelRow label="AI 판정" description="모델 분석 결과">
+          <ValueBadge tone={aiTone}>{AI_LABELS[result.aiStatus]}</ValueBadge>
+        </PanelRow>
+        <PanelRow label="서명 상태" description="EIP-712 검증 단계">
+          <ValueBadge
+            tone={
+              result.eip712Status === "VERIFIED"
+                ? "green"
+                : result.eip712Status === "FAILED"
+                  ? "red"
+                  : "gray"
+            }
+          >
+            {SIGNATURE_LABELS[result.eip712Status]}
+          </ValueBadge>
+        </PanelRow>
+        <PanelRow
+          label={mode === "REGISTER" ? "등록 거래 상태" : "구매 거래 상태"}
+          description={
+            transactionPhase === "PRE_SUBMISSION" ? "전송 전 단계" : "전송 후 단계"
+          }
+        >
+          <div className="flex items-center gap-2">
+            <ValueBadge tone={transactionTone}>
+              {TRANSACTION_LABELS[transactionStatus]}
+            </ValueBadge>
+            {transactionStatus === "CONFIRMING" && (
               <button
-                disabled
-                title="로컬 네트워크는 탐색기가 없습니다"
-                className="cursor-not-allowed rounded border border-[#30363d] px-1.5 py-1 text-[9px] text-[#484f58]"
+                type="button"
+                onClick={onRecheck}
+                className="rounded border border-blue-500/30 px-2 py-1 text-[9px] text-blue-400 hover:bg-blue-500/10"
               >
-                탐색기
+                목업 결과 재확인 (실제 조회 아님)
               </button>
             )}
           </div>
-        ) : (
-          <span className="text-xs font-mono text-[#6B7280]">—</span>
-        )}
-      </PanelRow>
-      <PanelRow label="Token ID" description="발급된 ERC-1155 토큰 ID">
-        {result.tokenId !== undefined ? (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-white">
-              #{result.tokenId}
-            </span>
-            <ValueBadge>양도 불가</ValueBadge>
-            <span
-              title="구매자별 1개"
-              className="cursor-help text-[10px] text-[#6B7280]"
+        </PanelRow>
+
+        {mode === "PURCHASE" && (
+          <PanelRow
+            label="Mint Success"
+            description="ERC-1155 라이선스 발급 결과"
+          >
+            <ValueBadge
+              tone={
+                transactionStatus === "SUCCESS"
+                  ? "green"
+                  : transactionStatus === "CONTRACT_REJECTED"
+                    ? "red"
+                    : transactionStatus === "POLICY_BLOCKED"
+                      ? "orange"
+                    : "gray"
+              }
             >
-              ⓘ
-            </span>
-          </div>
-        ) : (
-          <span className="text-xs font-mono text-[#6B7280]">—</span>
+              {transactionStatus === "SUCCESS"
+                ? "✓ Mint Success"
+                : transactionStatus === "CONTRACT_REJECTED"
+                  ? "× Mint Rejected"
+                  : transactionStatus === "POLICY_BLOCKED"
+                    ? "정책상 발급 제한"
+                  : "미확정"}
+            </ValueBadge>
+          </PanelRow>
         )}
-      </PanelRow>
-      <PanelRow label="Similarity Score" description="AI 유사도 리스크 점수">
-        {scoreHidden ? (
-          <ValueBadge tone="red">동일 지문 감지</ValueBadge>
-        ) : score !== null ? (
-          <div className="w-full max-w-[230px]">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-xs font-bold font-mono text-white">
-                {score.toFixed(2)}
+
+        {hasPreviousRegistration && (
+          <PanelRow
+            label="기존 음원 등록"
+            description="현재 구매 요청과 분리된 이전 등록 성공 기록"
+          >
+            <div className="text-right">
+              <div className="text-[10px] font-mono text-emerald-400">
+                TRACK #{result.onchainTrackId}
+              </div>
+              <code className="mt-0.5 block text-[9px] text-[#9CA3AF]">
+                {result.registrationTxHash?.slice(0, 10)}…
+                {result.registrationTxHash?.slice(-8)}
+              </code>
+            </div>
+          </PanelRow>
+        )}
+
+        {reason && (
+          <PanelRow label="실패·취소 사유" description="현재 요청이 중단된 이유">
+            <div className="w-full rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-left">
+              <div className="text-xs font-semibold text-red-400">
+                {reason.title}
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed text-[#9CA3AF]">
+                {reason.message}
+              </p>
+              {result.failureDetail && (
+                <code className="mt-2 block break-all rounded border border-[#30363d] bg-[#0d1117] p-2 text-[9px] text-red-300">
+                  {result.failureDetail}
+                </code>
+              )}
+              {failureReason !== "HOLD_PURCHASE_RESTRICTED" && (
+                <button
+                  type="button"
+                  onClick={
+                    failureReason === "DUPLICATE_FINGERPRINT"
+                      ? onAppeal
+                      : onRetry
+                  }
+                  className="mt-2 rounded border border-[#30363d] bg-[#1c2128] px-2 py-1 text-[10px] font-medium text-white hover:border-[#484f58]"
+                >
+                  {failureReason === "DUPLICATE_FINGERPRINT"
+                    ? "이의 제기"
+                    : transactionStatus === "CONFIRMING"
+                      ? "결과 재확인"
+                      : "다시 시도"}
+                </button>
+              )}
+            </div>
+          </PanelRow>
+        )}
+
+        <PanelRow
+          label={mode === "REGISTER" ? "등록 트랜잭션 해시" : "구매 트랜잭션 해시"}
+          description={
+            hash ? "전송된 목업 거래 식별자" : "해당 거래가 전송되지 않아 해시 없음"
+          }
+        >
+          {hash ? (
+            <div className="flex min-w-0 items-center gap-1.5">
+              <code className="truncate text-[10px] text-blue-400">
+                {shortenedHash}
+              </code>
+              <button
+                type="button"
+                onClick={copyHash}
+                className="rounded border border-[#30363d] px-1.5 py-1 text-[9px] text-[#9CA3AF] hover:text-white"
+              >
+                {copied ? "복사됨" : "복사"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTransaction(true)}
+                className="rounded border border-blue-500/30 px-1.5 py-1 text-[9px] text-blue-400 hover:bg-blue-500/10"
+              >
+                거래 상세
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs font-mono text-[#6B7280]">—</span>
+          )}
+        </PanelRow>
+
+        {mode === "REGISTER" ? (
+          <PanelRow label="온체인 음원 ID" description="등록된 음원 레코드 ID">
+            {result.onchainTrackId !== undefined ? (
+              <span className="text-xs font-mono text-white">
+                TRACK #{result.onchainTrackId}
               </span>
-              <ValueBadge tone={verdictTone}>{result.riskVerdict}</ValueBadge>
-            </div>
-            <div className="relative flex h-1.5 overflow-visible rounded-full">
-              <div
-                className="rounded-l-full bg-emerald-500"
-                style={{ width: `${THRESHOLD.warn * 100}%` }}
-              />
-              <div
-                className="bg-amber-500"
-                style={{
-                  width: `${(THRESHOLD.hold - THRESHOLD.warn) * 100}%`,
-                }}
-              />
-              <div
-                className="rounded-r-full bg-red-500"
-                style={{ width: `${(1 - THRESHOLD.hold) * 100}%` }}
-              />
-              {[THRESHOLD.warn, THRESHOLD.hold].map((threshold) => (
-                <span
-                  key={threshold}
-                  className="absolute top-[-3px] h-3 w-px bg-white/80"
-                  style={{ left: `${threshold * 100}%` }}
-                />
-              ))}
-              <span
-                className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#0d1117] bg-white"
-                style={{ left: `${score * 100}%` }}
-              />
-            </div>
-            <div className="mt-1 flex justify-end gap-4 text-[8px] font-mono text-[#6B7280]">
-              <span>{THRESHOLD.warn.toFixed(2)}</span>
-              <span>{THRESHOLD.hold.toFixed(2)}</span>
-            </div>
-          </div>
+            ) : (
+              <span className="text-xs font-mono text-[#6B7280]">—</span>
+            )}
+          </PanelRow>
         ) : (
-          <span className="text-xs font-mono text-[#6B7280]">—</span>
+          <PanelRow label="Token ID" description="발급된 ERC-1155 라이선스 ID">
+            {result.tokenId !== undefined &&
+            transactionStatus === "SUCCESS" ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-white">
+                  #{result.tokenId}
+                </span>
+                <ValueBadge>양도 불가</ValueBadge>
+              </div>
+            ) : (
+              <span className="text-xs font-mono text-[#6B7280]">—</span>
+            )}
+          </PanelRow>
         )}
-      </PanelRow>
-      <PanelRow label="Hold Status" description="isHold 상태">
-        <ValueBadge tone={result.isHold ? "orange" : "green"}>
-          {result.isHold ? "정산 보류 (에스크로)" : "정산 정상"}
-        </ValueBadge>
-      </PanelRow>
-      {result.isHold && result.mintStatus === "success" && (
-        <div className="border-t border-amber-500/20 bg-amber-500/5 p-4">
-          <div className="text-xs font-semibold text-amber-400">
-            정산 보류 중 (검토 중)
+
+        <PanelRow
+          label="Similarity Score"
+          description="AI 산출 점수 · 계약 판정 기준 0.80 / 0.90 적용"
+        >
+          {score !== null ? (
+            <div className="w-full max-w-[230px]">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-bold font-mono text-white">
+                  {score.toFixed(2)}
+                </span>
+                <ValueBadge tone={aiTone}>{AI_LABELS[result.aiStatus]}</ValueBadge>
+              </div>
+              <div className="relative flex h-1.5 overflow-visible rounded-full">
+                <div
+                  className="rounded-l-full bg-emerald-500"
+                  style={{ width: `${THRESHOLD.warn * 100}%` }}
+                />
+                <div
+                  className="bg-amber-500"
+                  style={{
+                    width: `${(THRESHOLD.hold - THRESHOLD.warn) * 100}%`,
+                  }}
+                />
+                <div
+                  className="rounded-r-full bg-red-500"
+                  style={{ width: `${(1 - THRESHOLD.hold) * 100}%` }}
+                />
+                <span
+                  className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#0d1117] bg-white"
+                  style={{ left: `${score * 100}%` }}
+                />
+              </div>
+              <div className="mt-1 text-right text-[8px] text-[#6B7280]">
+                계약 판정 기준 · WARN {THRESHOLD.warn.toFixed(2)} · HOLD{" "}
+                {THRESHOLD.hold.toFixed(2)}
+              </div>
+            </div>
+          ) : (
+            <span className="text-xs font-mono text-[#6B7280]">—</span>
+          )}
+        </PanelRow>
+
+        {isHold && (
+          <div className="border-t border-amber-500/20 bg-amber-500/5 p-4">
+            <div className="text-xs font-semibold text-amber-400">
+              {HOLD_POLICY === "ONCHAIN_RECORD"
+                ? "HOLD 기록 완료 · 구매 제한"
+                : "HOLD · 등록 보류"}
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-[#9CA3AF]">
+              {HOLD_POLICY === "ONCHAIN_RECORD"
+                ? "등록 결과는 온체인에 기록되지만 라이선스 구매·발급은 진행되지 않습니다."
+                : "등록용 서명 발급과 온체인 등록이 진행되지 않습니다."}
+            </p>
+            <p className="mt-2 text-[9px] text-amber-300/80">
+              목표 정책 미리보기 · 현재 백엔드 등록 경로와 다를 수 있음
+            </p>
           </div>
-          <p className="mt-1 text-[10px] leading-relaxed text-[#9CA3AF]">
-            라이선스 NFT는 정상 발급되었습니다. 유사도가 높아 판매 대금은
-            검토가 끝날 때까지 에스크로에 보관되며, 창작자에게 즉시
-            분배되지 않습니다.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[10px] font-medium text-amber-400">
-              근거 보기
-            </button>
-            <button
-              onClick={onAppeal}
-              className="rounded border border-[#30363d] bg-[#1c2128] px-2.5 py-1.5 text-[10px] font-medium text-white hover:border-[#484f58]"
-            >
-              이의 제기
-            </button>
+        )}
+      </section>
+
+      {showTransaction && hash && (
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm"
+          onClick={() => setShowTransaction(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-2xl border border-[#30363d] bg-[#161b22] p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-white">
+                  목업 거래 상세
+                </h3>
+                <p className="mt-1 text-[10px] text-[#9CA3AF]">
+                  공개 탐색기가 없는 로컬 네트워크입니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTransaction(false)}
+                className="text-xs text-[#9CA3AF] hover:text-white"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="mt-5 space-y-3 rounded-xl border border-[#21262d] bg-[#0d1117] p-4">
+              {[
+                ["유형", mode === "REGISTER" ? "음원 등록" : "라이선스 구매"],
+                ["네트워크", `${MOCK_NETWORK.name} (${MOCK_NETWORK.chainId})`],
+                ["상태", TRANSACTION_LABELS[transactionStatus]],
+                ["통화", MOCK_NETWORK.currencySymbol],
+              ].map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-4 text-xs">
+                  <span className="text-[#6B7280]">{label}</span>
+                  <span className="font-mono text-white">{value}</span>
+                </div>
+              ))}
+              <div className="border-t border-[#21262d] pt-3">
+                <div className="text-[10px] text-[#6B7280]">거래 해시</div>
+                <code className="mt-1 block break-all text-[10px] text-blue-400">
+                  {hash}
+                </code>
+              </div>
+            </div>
           </div>
         </div>
       )}
-    </section>
+    </>
   )
 }

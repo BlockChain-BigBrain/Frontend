@@ -19,7 +19,7 @@ export const initialTxns = [
     role: "voice",
     split: "20%",
     earned: `10 ${NETWORK.currencySymbol}`,
-    status: "frozen",
+    status: "restricted",
   },
   {
     date: "2025-12-10",
