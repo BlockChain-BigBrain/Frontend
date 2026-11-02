@@ -1,6 +1,6 @@
 export const THRESHOLD = {
   warn: 0.8,
-  hold: 0.9,
+  hold: 0.85,
 } as const
 
 export const HOLD_POLICY: "ONCHAIN_RECORD" | "BLOCK_BEFORE_REGISTER" =
