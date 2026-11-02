@@ -188,6 +188,7 @@ export const SCENARIOS: Record<
   },
 }
 
+/** Demo-only transition: does not query a backend or blockchain. */
 export function resolveConfirmingPurchase(result: ChainResult): ChainResult {
   if (result.purchaseStatus !== "CONFIRMING") return result
 
