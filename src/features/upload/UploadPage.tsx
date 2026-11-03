@@ -438,6 +438,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   async function handleUpload() {
     if (uploadLock.current) return
     if (!audioFile || !title.trim()) { setUploadError("음원 파일과 제목을 입력해 주세요."); return }
+    if (!window.confirm("음원을 비공개 임시 저장할까요? 저장 후 보이스 제공자를 초대할 수 있으며, AI 검증 및 블록체인 등록은 별도로 진행됩니다.")) return
     uploadLock.current = true
     setUploading(true)
     setUploadError("")
@@ -1053,7 +1054,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
             {uploading ? "음원 업로드 중…" : uploadedId !== null ? "업로드 완료" : "음원 업로드"}
           </button>
           {uploadError && <p role="alert" className="text-sm text-red-400">{uploadError}</p>}
-          {uploadedId !== null && <p role="status" className="text-sm text-emerald-400">음원 업로드 완료 · ID: {uploadedId} (AI 검증·온체인 등록 전)</p>}
+          {uploadedId !== null && <p role="status" className="text-sm text-emerald-400">비공개 임시 저장 완료 · ID: {uploadedId} (기여자 동의·AI 검증·온체인 등록 전)</p>}
         </div>
       </div>
 
