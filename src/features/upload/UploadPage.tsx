@@ -723,7 +723,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
                   기여도 설정 (수익 분배 비율)
                 </label>
                 <span className="text-xs font-mono font-semibold text-emerald-400">
-                  합계: 100% ✓
+                  소유자 {100 - voiceWeight}% · 보이스 초대 예정 {voiceWeight}%
                 </span>
               </div>
               <div className="space-y-3">
@@ -798,6 +798,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
               </div>
               {inviteInfo && <p role="status" className="text-xs text-emerald-400">{inviteInfo}</p>}
               {inviteError && <p role="alert" className="text-xs text-red-400">{inviteError}</p>}
+              {invitations.reduce((sum, item) => sum + (item.status === "REJECTED" || item.status === "CANCELLED" ? 0 : Number(item.percentage)), 0) > voiceWeight && <p role="alert" className="text-xs text-red-400">보이스 기여도 배분을 초과했습니다.</p>}
               {invitations.map(item => <div key={item.id} className="flex justify-between text-xs text-[#e6edf3] bg-[#1c2128] p-2 rounded">
                 <span>{item.email || item.walletAddress} · {item.percentage}%</span>
                 <span>{item.status === "ACCEPTED" ? "수락 완료" : item.status === "PENDING" ? "수락 대기" : item.status}</span>
