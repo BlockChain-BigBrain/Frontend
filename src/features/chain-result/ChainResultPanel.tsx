@@ -388,7 +388,7 @@ export default function ChainResultPanel({
 
         <PanelRow
           label="Similarity Score"
-          description="AI 산출 점수 · 계약 판정 기준 0.80 / 0.90 적용"
+          description="Pairwise temporal score와 query-level verifier score를 분리해 표시합니다. WARN 0.351229 · HOLD 0.947200"
         >
           {score !== null ? (
             <div className="w-full max-w-[230px]">

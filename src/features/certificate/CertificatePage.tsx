@@ -12,7 +12,7 @@ export default function CertificateScreen({
   setScreen: (s: Screen) => void
   chainResult: ChainResult
 }) {
-  const steps = [
+  let steps = [
     {
       num: "01",
       title: "오디오 특징 추출",
@@ -31,6 +31,11 @@ export default function CertificateScreen({
       desc: "Cosine Similarity 연산 완료 (1,247건)",
       detail: `${AI_POLICY.comparisonScope} (온체인 CID 앵커) · 최고 유사도: 0.31 · 계약 HOLD 기준: ${THRESHOLD.hold.toFixed(2)}`,
     },
+  ]
+  steps = [
+    { num: "01", title: "Layer 1 정확 중복 확인", desc: "Chromaprint 오디오 지문으로 동일 오디오 파일 여부를 먼저 확인합니다.", detail: "정확히 일치하면 BLOCK · 중복이 아니면 Layer 2로 진행" },
+    { num: "02", title: "Layer 2 음악적 관계 분석", desc: "10초 창·5초 stride CLAP 후보 검색 후 pitch · rhythm · chroma와 시간 일관성을 계산합니다.", detail: "query-level verifier + pairwise temporal verifier · CLAP은 후보 검색용" },
+    { num: "03", title: "정책 판정 및 증거 기록", desc: "서로 다른 두 점수에 WARN/HOLD 기준을 적용하고 후보 구간·모델 버전·정책 버전을 보존합니다.", detail: "WARN 0.351229(query) · HOLD 0.947200(pairwise) · 결과 CID 기록" },
   ]
   const top3 = [
     { title: "Void Echoes", similarity: 0.31, model: "Udio v2" },
@@ -173,7 +178,7 @@ export default function CertificateScreen({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#9CA3AF] font-mono">
-                gatekeeper-v2.1
+                track-ai-balanced-policy-v5
               </span>
               <Badge variant="verified">검증 완료</Badge>
             </div>
@@ -339,7 +344,7 @@ export default function CertificateScreen({
               </div>
               {[
                 ["검증자 서명", "0x8f3a9c2e1b7d4f6a...d7e1 (EIP-712)"],
-                ["모델 버전", "gatekeeper-v2.1 · LAION-CLAP-2024"],
+                ["정책·모델 버전", "hybrid_query_top3_pairwise_hold-v5"],
                 ["검증 해시 온체인", "0x92e1a4b3...f7c8 (Hardhat Local)"],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center gap-3">

@@ -30,9 +30,9 @@ function AICheckingView({
     const tCount = setTimeout(() => {
       let c = 0
       const iv = setInterval(() => {
-        c = Math.min(c + 52, 1247)
+        c = Math.min(c + 1, 3)
         setCompareCount(c)
-        if (c >= 1247) clearInterval(iv)
+        if (c >= 3) clearInterval(iv)
       }, 80)
     }, 2300)
     const t4 = setTimeout(() => onDone(failMode ? "fail" : "pass"), 4200)
@@ -48,17 +48,17 @@ function AICheckingView({
   const steps = [
     {
       label: "오디오 특징 추출",
-      sub: "20 MFCC · 128 mel bands · 44.1kHz",
+      sub: "Chromaprint exact duplicate check · 10s windows",
       done: checkStep >= 1,
     },
     {
       label: "LAION-CLAP 임베딩",
-      sub: "512-dim 오디오-텍스트 벡터 생성",
+      sub: "CLAP candidate retrieval · pitch/rhythm/chroma evidence",
       done: checkStep >= 2,
     },
     {
       label: "벡터 DB 코사인 유사도 비교",
-      sub: `${compareCount.toLocaleString()} / 1,247건`,
+      sub: `${compareCount.toLocaleString()} / top-3 후보 verifier`,
       done: checkStep >= 3,
     },
   ]
@@ -82,7 +82,7 @@ function AICheckingView({
         <div className="bg-[#161b22] border border-[#21262d] rounded-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-[#21262d] bg-[#1c2128]">
             <span className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wider font-mono">
-              gatekeeper-v2.1 · LAION-CLAP
+              hybrid_query_top3_pairwise_hold-v5 · policy-v5
             </span>
           </div>
           <div className="p-6 space-y-4">
@@ -148,7 +148,7 @@ function AICheckingView({
                       <div className="h-1 rounded-full bg-[#30363d] overflow-hidden">
                         <div
                           className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{ width: `${(compareCount / 1247) * 100}%` }}
+                          style={{ width: `${(compareCount / 3) * 100}%` }}
                         ></div>
                       </div>
                     </div>
@@ -202,7 +202,7 @@ function AIPassView({
                 PASS — 독창성 검증 완료
               </div>
               <div className="text-xs text-[#9CA3AF] font-mono">
-                gatekeeper-v2.1 · 2026-01-13 09:21:44 UTC
+                track-ai-balanced-policy-v5-20261102 · provisional
               </div>
             </div>
             <Badge variant="verified">PASS · 유사도 0.08</Badge>
@@ -303,7 +303,7 @@ function AIFailView({ onReset }: { onReset: () => void }) {
                 BLOCK — 동일 지문 감지
               </div>
               <div className="text-xs text-[#9CA3AF] font-mono">
-                gatekeeper-v2.1 · 2026-01-13 09:21:44 UTC
+                hybrid_query_top3_pairwise_hold-v5 · provisional
               </div>
             </div>
             <Badge variant="danger">BLOCK · 민팅 거부</Badge>
