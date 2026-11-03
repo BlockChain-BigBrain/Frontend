@@ -444,13 +444,17 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
     setUploadError("")
     setUploadedId(null)
     try {
-      await auth.me()
+      const currentUser = await auth.me()
       const form = new FormData()
       form.set("audio", audioFile)
       form.set("title", title.trim())
       form.set("prompt", prompt)
       form.set("workLog", workLog)
-      form.set("isPublic", "true")
+      form.set("isPublic", "false")
+      form.set("contributors", JSON.stringify([
+        ...(promptWeight > 0 ? [{ userId: currentUser.id, role: "PROMPT", percentage: promptWeight }] : []),
+        ...(editWeight > 0 ? [{ userId: currentUser.id, role: "EDIT", percentage: editWeight }] : []),
+      ]))
       const track = await api("/api/tracks", form)
       if (!Number.isInteger(track.id) || track.id <= 0) throw new Error("서버의 업로드 응답을 확인해 주세요.")
       setUploadedId(track.id)
