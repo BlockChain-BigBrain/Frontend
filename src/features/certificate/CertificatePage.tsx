@@ -1,6 +1,7 @@
 import Badge from "../../shared/components/Badge"
 import Waveform from "../../shared/components/Waveform"
 import { AI_POLICY } from "../../shared/config/constants"
+import { NETWORK } from "../../shared/config/network"
 import type { ChainResult, Screen } from "../../shared/types/domain"
 
 // ─── Certificate ────────────────────────────────────────────────────────────────
@@ -124,9 +125,9 @@ export default function CertificateScreen({
               정산 내역 · 합의 비율대로 자동 분배
             </div>
             <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-[#9CA3AF]">
-              <span>프롬프트 70% · 35 {NETWORK.currencySymbol}</span>
-              <span>보이스 20% · 10 {NETWORK.currencySymbol}</span>
-              <span>플랫폼 10% · 5 {NETWORK.currencySymbol}</span>
+              <span>실제 분배 내역은 거래 기록에서 확인</span>
+              <span>기여도별 정산 데이터 미제공</span>
+              <span></span>
             </div>
           </div>
           <p className="text-[10px] text-[#6B7280] mt-4">
@@ -154,7 +155,7 @@ export default function CertificateScreen({
               <span className="text-xs text-[#9CA3AF] font-mono">
                 track-ai-balanced-policy-v5
               </span>
-              <Badge variant="verified">검증 완료</Badge>
+              <Badge variant="verified">{chainResult.aiStatus}</Badge>
             </div>
           </div>
 
@@ -296,7 +297,7 @@ export default function CertificateScreen({
                 </div>
                 <div className="text-right flex-shrink-0">
                   <div className="text-2xl font-black font-mono text-emerald-400">
-                    0.31
+                    {chainResult.similarityScore?.toFixed(2) ?? "—"}
                   </div>
                   <div className="text-[10px] text-[#9CA3AF]">
                     Cosine Similarity
