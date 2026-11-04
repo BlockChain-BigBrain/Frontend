@@ -8,6 +8,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
   for (const key of ["window", "document", "localStorage", "FormData", "File", "Blob", "HTMLElement", "Event", "MouseEvent"])
     Object.defineProperty(globalThis, key, { configurable: true, value: (dom.window as any)[key] });
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  dom.window.confirm = () => true;
   let uploaded = 0, fail = true, signedIn = true, filename = 'my-song.wav';
   const calls: string[] = [];
   const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -16,6 +17,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
     if (path.endsWith('/refresh')) return response({ result: { accessToken: 'fixture' } });
     if (path.endsWith('/me')) return signedIn ? response({ result: { id: 1, nickname: 'Creator', email: 'test@example.test' } }) : response({}, 401);
     if (path.endsWith('/logout')) { signedIn = false; return response({}); }
+    if (path.includes('/invitations')) return response([]);
     assert.equal(path, '/api/tracks');
     assert.equal(init.method, 'POST');
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer fixture');
@@ -23,7 +25,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
     const form = init.body as FormData;
     assert.equal((form.get('audio') as File).name, filename);
     assert.equal(form.get('title'), 'my-song');
-    assert.equal(form.get('isPublic'), 'true');
+    assert.equal(form.get('isPublic'), 'false');
     uploaded++;
     return fail ? response({ error: '저장 실패' }, 503) : response({ id: 42 }, 201);
   };
