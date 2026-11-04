@@ -96,7 +96,7 @@ export default function CertificateScreen({
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-3">
             {[
-              ["트랙명", "Neon Cascade"],
+              ["트랙명", "데이터 없음"],
               ["라이선스 유형", "비독점 상업 이용권"],
               ["구매자 지갑", "—"],
               ["판매자 지갑", "—"],
@@ -165,7 +165,7 @@ export default function CertificateScreen({
               </div>
               <div className="flex-1">
                 <div className="text-base font-bold text-white">
-                  Neon Cascade
+                  데이터 없음
                 </div>
                 <div className="text-xs text-[#9CA3AF] font-mono">
                   검증 상세 정보는 실제 등록 데이터에서 확인하세요
