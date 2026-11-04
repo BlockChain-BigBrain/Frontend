@@ -1,7 +1,6 @@
 import Badge from "../../shared/components/Badge"
 import Waveform from "../../shared/components/Waveform"
-import { AI_POLICY, THRESHOLD } from "../../shared/config/constants"
-import { NETWORK } from "../../shared/config/network"
+import { AI_POLICY } from "../../shared/config/constants"
 import type { ChainResult, Screen } from "../../shared/types/domain"
 
 // ─── Certificate ────────────────────────────────────────────────────────────────
@@ -12,36 +11,12 @@ export default function CertificateScreen({
   setScreen: (s: Screen) => void
   chainResult: ChainResult
 }) {
-  let steps = [
-    {
-      num: "01",
-      title: "오디오 특징 추출",
-      desc: "Librosa 기반 MFCC · 템포 · 멜-스펙트로그램 추출",
-      detail: "20 MFCC coefficients · 128 mel bands · 44.1kHz · 3.42s window",
-    },
-    {
-      num: "02",
-      title: "프롬프트 임베딩",
-      desc: "LAION-CLAP 오디오-텍스트 벡터화 완료",
-      detail: "LAION-CLAP · 512-dim audio-text embedding",
-    },
-    {
-      num: "03",
-      title: "벡터 DB 유사도 비교",
-      desc: "Cosine Similarity 연산 완료 (1,247건)",
-      detail: `${AI_POLICY.comparisonScope} (온체인 CID 앵커) · 최고 유사도: 0.31 · 계약 HOLD 기준: ${THRESHOLD.hold.toFixed(2)}`,
-    },
+  const steps = [
+    { num: "01", title: "Layer 1 정확 중복 확인", desc: "Chromaprint 지문으로 중복 여부를 확인합니다.", detail: "동일 지문은 BLOCK" },
+    { num: "02", title: "Layer 2 음악적 관계 분석", desc: "중복이 아닌 음원의 CLAP 후보와 음악적 관계를 분석합니다.", detail: "query-level / pairwise temporal 검증" },
+    { num: "03", title: "정책 판정 및 증거 기록", desc: "서버 판정과 모델·정책 버전을 기록합니다.", detail: "임계값과 검증 증거는 실제 AI 응답을 기준으로 확인" },
   ]
-  steps = [
-    { num: "01", title: "Layer 1 정확 중복 확인", desc: "Chromaprint 오디오 지문으로 동일 오디오 파일 여부를 먼저 확인합니다.", detail: "정확히 일치하면 BLOCK · 중복이 아니면 Layer 2로 진행" },
-    { num: "02", title: "Layer 2 음악적 관계 분석", desc: "10초 창·5초 stride CLAP 후보 검색 후 pitch · rhythm · chroma와 시간 일관성을 계산합니다.", detail: "query-level verifier + pairwise temporal verifier · CLAP은 후보 검색용" },
-    { num: "03", title: "정책 판정 및 증거 기록", desc: "서로 다른 두 점수에 WARN/HOLD 기준을 적용하고 후보 구간·모델 버전·정책 버전을 보존합니다.", detail: "WARN 0.351229(query) · HOLD 0.947200(pairwise) · 결과 CID 기록" },
-  ]
-  const top3 = [
-    { title: "Void Echoes", similarity: 0.31, model: "Udio v2" },
-    { title: "Synthetic Pulse", similarity: 0.18, model: "Stable Audio 2.0" },
-    { title: "Neon Grid", similarity: 0.12, model: "MusicGen" },
-  ]
+  const top3: { title: string; similarity: number; model: string }[] = []
 
   return (
     <div className="pt-14 min-h-screen">
@@ -70,8 +45,7 @@ export default function CertificateScreen({
               상업적 이용 허가 증명서
             </h2>
             <p className="text-sm text-[#9CA3AF] max-w-md mx-auto">
-              결제가 완료되어 ERC-1155 라이선스 NFT와 EIP-712 영수증이
-              발급되었습니다.
+              구매 트랜잭션과 NFT 발급 상태는 실제 거래 기록을 확인해 주세요.
             </p>
             <div className="flex items-center justify-center gap-3 mt-4 text-xs font-mono text-[#9CA3AF]">
               <span>
@@ -93,7 +67,7 @@ export default function CertificateScreen({
               </span>
               <span>·</span>
               <span>
-                Block: <span className="text-white">#47,293,841</span>
+                Block: <span className="text-white">—</span>
               </span>
             </div>
           </div>
@@ -124,10 +98,10 @@ export default function CertificateScreen({
             {[
               ["트랙명", "Neon Cascade"],
               ["라이선스 유형", "비독점 상업 이용권"],
-              ["구매자 지갑", "0x3a7f...c4d2"],
-              ["판매자 지갑", "0x8f3a...d7e1"],
-              ["가격", `50 ${NETWORK.currencySymbol}`],
-              ["발급 시각", "2026-01-13 09:21 UTC"],
+              ["구매자 지갑", "—"],
+              ["판매자 지갑", "—"],
+              ["가격", "—"],
+              ["발급 시각", "—"],
               [
                 "트랜잭션 해시",
                 chainResult.purchaseTxHash
@@ -194,7 +168,7 @@ export default function CertificateScreen({
                   Neon Cascade
                 </div>
                 <div className="text-xs text-[#9CA3AF] font-mono">
-                  Suno v4.5 · by 0x8f3a...d7e1 · Standard BGM License
+                  검증 상세 정보는 실제 등록 데이터에서 확인하세요
                 </div>
               </div>
               <div className="text-right">
@@ -246,7 +220,7 @@ export default function CertificateScreen({
                     </div>
                   </div>
                   <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded flex-shrink-0">
-                    PASS
+                    {chainResult.aiStatus}
                   </span>
                 </div>
               ))}
@@ -267,14 +241,14 @@ export default function CertificateScreen({
                 </div>
                 <div className="flex-1">
                   <div className="text-base font-bold text-emerald-400 mb-1">
-                    PASS - 높은 유사도 리스크 없음
+                    AI 판정: {chainResult.aiStatus}
                   </div>
                   <div className="text-sm text-[#e6edf3] mb-3">
                     유사도{" "}
                     <span className="font-mono font-bold text-emerald-400">
-                      0.31
+                      {chainResult.similarityScore?.toFixed(2) ?? "—"}
                     </span>{" "}
-                    — PASS 구간이며 현재 비교 대상 중 유사도 리스크가 낮습니다.
+                    — 최종 판정은 서버 AI 검증 결과를 따릅니다.
                   </div>
                   <div className="mb-3">
                     <div className="text-xs font-medium text-[#9CA3AF] mb-2">
@@ -330,7 +304,7 @@ export default function CertificateScreen({
                   <div className="mt-1 w-20 h-2 rounded-full bg-[#30363d] overflow-hidden">
                     <div
                       className="h-full rounded-full bg-emerald-500"
-                      style={{ width: "31%" }}
+                      style={{ width: `${Math.max(0, Math.min(1, chainResult.similarityScore ?? 0)) * 100}%` }}
                     ></div>
                   </div>
                 </div>
@@ -343,9 +317,9 @@ export default function CertificateScreen({
                 온체인 Attestation (EIP-712)
               </div>
               {[
-                ["검증자 서명", "0x8f3a9c2e1b7d4f6a...d7e1 (EIP-712)"],
-                ["정책·모델 버전", "hybrid_query_top3_pairwise_hold-v5"],
-                ["검증 해시 온체인", "0x92e1a4b3...f7c8 (Hardhat Local)"],
+                ["검증자 서명", "실제 서명 데이터 미제공"],
+                ["정책·모델 버전", AI_POLICY.scoreVersion],
+                ["검증 해시 온체인", "실제 해시 데이터 미제공"],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center gap-3">
                   <span className="text-[10px] text-[#9CA3AF] font-mono w-32 flex-shrink-0">
