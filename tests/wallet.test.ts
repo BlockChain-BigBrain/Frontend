@@ -88,3 +88,44 @@ test("only successful mined receipts complete; reverted receipts and timeout fai
     /기다리는/,
   )
 })
+
+test('network-only action switches to Hardhat without requesting signatures or transactions', async () => {
+  const { switchToHardhat } = await import('../src/wallet.ts')
+  let chain = '0x1'
+  const calls: string[] = []
+  await switchToHardhat({ request: async ({method,params}) => {
+    calls.push(method)
+    if (method === 'eth_chainId') return chain
+    assert.equal(method, 'wallet_switchEthereumChain')
+    assert.deepEqual(params, [{chainId:'0x7a69'}])
+    chain = '0x7a69'
+  } })
+  assert.deepEqual(calls, ['eth_chainId','wallet_switchEthereumChain','eth_chainId'])
+})
+test('network-only action adds an unknown local network and verifies the selected network', async () => {
+  const { switchToHardhat } = await import('../src/wallet.ts')
+  let chain = '0x1'
+  await switchToHardhat({ request: async ({method,params}) => {
+    if (method === 'eth_chainId') return chain
+    if (method === 'wallet_switchEthereumChain') throw Object.assign(new Error('unknown chain'),{code:4902})
+    assert.equal(method,'wallet_addEthereumChain')
+    const added = params![0] as any
+    assert.equal(added.chainId,'0x7a69')
+    assert.deepEqual(added.rpcUrls,['http://127.0.0.1:8545'])
+    chain = '0x7a69'
+  } })
+})
+
+test('newly added network is explicitly selected when adding alone does not switch it', async () => {
+  const { switchToHardhat } = await import('../src/wallet.ts')
+  let chain='0x1', switches=0
+  await switchToHardhat({ request: async ({method}) => {
+    if(method==='eth_chainId')return chain
+    if(method==='wallet_switchEthereumChain') {
+      if(++switches===1)throw Object.assign(new Error(),{code:4902})
+      chain='0x7a69';return
+    }
+    assert.equal(method,'wallet_addEthereumChain')
+  } })
+  assert.equal(switches,2)
+})

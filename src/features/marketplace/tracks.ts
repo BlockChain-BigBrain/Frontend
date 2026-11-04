@@ -1,6 +1,10 @@
 import { API_BASE } from "../../api/service"
+import { latestVerification, verificationPolicy } from "../verification/policy"
 
 export interface TrackVerification {
+  id?: number
+  trackId?: number
+  createdAt?: string
   source: string
   status: string
   riskStatus?: string | null
@@ -26,16 +30,14 @@ export interface PublicTrack {
 
 // Only completed, real AI evidence may supply a verdict or a similarity score.
 export function verificationView(track: PublicTrack) {
-  const verification = track.verifications?.[0]
+  const verification = latestVerification(track.verifications, track.id)
   if (track.verificationUnavailable) return { label: "검증 정보 확인 불가", score: null }
   if (!verification || verification.source !== "AI") return { label: "AI 검증 미실시", score: null }
-  if (verification.status !== "VERIFIED") return { label: verification.status === "PENDING" ? "AI 검증 중" : "AI 검증 실패", score: null }
-  if (verification.duplicate || verification.evidence?.decision === "BLOCK") return { label: "동일 음원 감지", score: null }
-  const verdict = verification.evidence?.decision ?? verification.riskStatus
-  if (!["PASS", "WARN", "HOLD"].includes(verdict ?? "")) return { label: "검증 결과 확인 필요", score: null }
-  const raw = verification.evidence ? verification.evidence.similarityScore : verification.riskScore
-  const value = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() ? Number(raw) : NaN
-  return { label: verdict!, score: Number.isFinite(value) && value >= 0 && value <= 1 ? value : null }
+  const policy = verificationPolicy(verification)
+  if (policy.pending) return { label: "AI 검증 중", score: null }
+  if (!policy.completed) return { label: "AI 검증 실패", score: null }
+  if (policy.blocked) return { label: "동일 음원 감지", score: null }
+  return { label: policy.eligible ? policy.verdict! : "검증 결과 확인 필요", score: policy.score }
 }
 
 export function audioUrl(track: PublicTrack) {

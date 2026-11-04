@@ -1,12 +1,16 @@
 import { auth } from "../../api"
 import { AuthError } from "../../auth"
-import { api, sendTransaction, savePending, readPending, confirmPending } from "../../api/service"
+import { api, sendTransaction, savePending, readPending, confirmPending, connectWallet } from "../../api/service"
 import { useEffect, useRef, useState } from "react"
 import ChainResultPanel from "../chain-result/ChainResultPanel"
 import Badge from "../../shared/components/Badge"
 import Waveform from "../../shared/components/Waveform"
 import type { ChainResult } from "../../shared/types/domain"
 import { NETWORK } from "../../shared/config/network"
+import { switchToHardhat } from "../../wallet"
+import VerificationNotice from "../verification/VerificationNotice"
+import { latestVerification, verificationPolicy, missingText } from "../verification/policy"
+import { readRegistration, prepareRegistration, registrationPacket, type RegistrationState } from "../verification/registration"
 
 type UploadStage = "idle" | "ai_checking" | "ai_pass" | "ai_fail" | "signing" | "done"
 
@@ -426,31 +430,91 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const [verificationBusy, setVerificationBusy] = useState(false)
   const [verificationMessage, setVerificationMessage] = useState("")
   const [verificationError, setVerificationError] = useState("")
+  const [currentTrack, setCurrentTrack] = useState<any>(null)
+  const [readiness, setReadiness] = useState<RegistrationState | null>(null)
+  const [preparing, setPreparing] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const selectionVersion = useRef(0)
+  const readinessVersion = useRef(0)
+  const verificationLock = useRef(false)
+  const preparationLock = useRef(false)
+  const currentVerification = latestVerification(currentTrack?.verifications, uploadedId ?? undefined)
+  const policy = verificationPolicy(currentVerification)
+  const canPrepare = policy.eligible && !!currentTrack?.contributionsFinalizedAt && currentTrack?.registrationStatus !== 'REGISTERED'
+  function invalidateVerification() {
+    selectionVersion.current++; readinessVersion.current++
+    setCurrentTrack(null); setReadiness(null)
+    setVerificationMessage(""); setVerificationError("")
+    setRegistrationTxHash(null); setRegistrationInfo(""); setRegistrationError("")
+    setInvitations([]); setInviteInfo(""); setInviteError("")
+  }
+  async function refreshRegistration(id: number, version = selectionVersion.current) {
+    const request = ++readinessVersion.current
+    const state = await readRegistration(id)
+    if (version === selectionVersion.current && request === readinessVersion.current) { setCurrentTrack(state.track); setReadiness(state) }
+    return state
+  }
   async function handleRealVerification() {
-    if (!uploadedId || verificationBusy) return
-    setVerificationBusy(true)
-    setVerificationError("")
+    if (!uploadedId || verificationLock.current || preparing || registrationBusy) return
+    const id = uploadedId, version = selectionVersion.current
+    verificationLock.current = true; readinessVersion.current++
+    setVerificationBusy(true); setReadiness(null)
+    setVerificationError(""); setCurrentTrack(null)
     setVerificationMessage("기여도 확정 상태를 확인하는 중…")
     try {
-      const track = await api(`/api/tracks/${uploadedId}`)
-      if (!track.contributionsFinalizedAt) {
-        await api(`/api/tracks/${uploadedId}/contributors/finalize`, {})
-      }
+      const track = await api(`/api/tracks/${id}`)
+      if (version !== selectionVersion.current) return
+      if (!track.contributionsFinalizedAt) await api(`/api/tracks/${id}/contributors/finalize`, {})
+      if (version !== selectionVersion.current) return
       setVerificationMessage("실제 AI 서버에서 음원을 검증하는 중…")
-      const latest = await api(`/api/tracks/${uploadedId}`)
+      const latest = await api(`/api/tracks/${id}`)
+      if (version !== selectionVersion.current) return
       const verified = latest.verifications?.some((v: { status: string }) => v.status === "VERIFIED")
-      const result = await api(`/api/tracks/${uploadedId}/${verified ? "reverify" : "verify"}`, {})
-      const decision = result.evidence?.decision || result.riskStatus || "결과 확인 필요"
-      setVerificationMessage(result.status === "VERIFIED"
-        ? `AI 검증 완료 · ${decision}. 다음 단계에서 IPFS 저장 및 온체인 등록을 진행하세요.`
-        : `AI 검증 상태: ${result.status || "확인 필요"} · ${result.errorCode || decision}`)
-    } catch (error) {
+      const result = await api(`/api/tracks/${id}/${verified ? "reverify" : "verify"}`, {})
+      if (version !== selectionVersion.current) return
+      setCurrentTrack({ ...latest, verifications: [result, ...(latest.verifications || [])] })
       setVerificationMessage("")
-      setVerificationError(error instanceof Error ? error.message : "기여도 확정 또는 AI 검증에 실패했습니다.")
-    } finally {
-      setVerificationBusy(false)
-    }
+      if (verificationPolicy(result).eligible) {
+        try { await refreshRegistration(id, version) }
+        catch (error) { if (version === selectionVersion.current) setRegistrationError(`등록 조건 확인 실패. ${error instanceof Error ? error.message : "잠시 후 새로고침해 주세요."}`) }
+      }
+    } catch (error) {
+      if (version !== selectionVersion.current) return
+      setReadiness(null); setVerificationMessage("")
+      setVerificationError(`AI 검증 실패 · 재시도 필요. ${error instanceof Error ? error.message : "기여도 확정 또는 AI 검증에 실패했습니다."}`)
+    } finally { verificationLock.current = false; setVerificationBusy(false) }
   }
+  async function handlePrepare() {
+    if (!uploadedId || !canPrepare || preparationLock.current) return
+    const id = uploadedId, version = selectionVersion.current
+    preparationLock.current = true; readinessVersion.current++; setPreparing(true); setReadiness(null); setRegistrationError("")
+    try {
+      await prepareRegistration(id, api, () => version === selectionVersion.current)
+      if (version !== selectionVersion.current) return
+      await refreshRegistration(id, version)
+      if (version === selectionVersion.current) setRegistrationInfo("IPFS 업로드와 등록 준비 상태를 확인했습니다. 지갑·네트워크 조건 충족 후 MetaMask에서 등록해 주세요.")
+    } catch (error) {
+      if (version === selectionVersion.current) setRegistrationError(error instanceof Error ? error.message : "등록 준비에 실패했습니다.")
+    } finally { preparationLock.current = false; setPreparing(false) }
+  }
+  async function handleRefresh(connect = false, switchNetwork = false) {
+    if (!uploadedId || refreshing) return
+    const version = selectionVersion.current, id = uploadedId
+    readinessVersion.current++; setRefreshing(true); setReadiness(null); setRegistrationError("")
+    try {
+      if (switchNetwork) await switchToHardhat()
+      if (connect) await connectWallet()
+      if (version === selectionVersion.current) await refreshRegistration(id, version)
+    } catch (error) { if (version === selectionVersion.current) setRegistrationError(error instanceof Error ? error.message : "등록 조건을 확인하지 못했습니다.") }
+    finally { setRefreshing(false) }
+  }
+  useEffect(() => () => { selectionVersion.current++; readinessVersion.current++ }, [])
+  useEffect(() => {
+    const provider = (window as any).ethereum
+    const changed = () => { setReadiness(null); if (uploadedId) void handleRefresh() }
+    provider?.on?.('accountsChanged', changed); provider?.on?.('chainChanged', changed)
+    return () => { provider?.removeListener?.('accountsChanged', changed); provider?.removeListener?.('chainChanged', changed) }
+  }, [uploadedId])
 
   const [registrationBusy, setRegistrationBusy] = useState(false)
   const [registrationError, setRegistrationError] = useState("")
@@ -459,6 +523,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const registrationLock = useRef(false)
   function selectAudio(file: File | undefined) {
     if (!file || uploadLock.current) return
+    invalidateVerification()
     setUploadedId(null)
     setRegistrationTxHash(null)
     setRegistrationInfo("")
@@ -479,6 +544,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
     uploadLock.current = true
     setUploading(true)
     setUploadError("")
+    invalidateVerification()
     setUploadedId(null)
     try {
       const currentUser = await auth.me()
@@ -495,6 +561,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
       const track = await api("/api/tracks", form)
       if (!Number.isInteger(track.id) || track.id <= 0) throw new Error("서버의 업로드 응답을 확인해 주세요.")
       setUploadedId(track.id)
+      setCurrentTrack(track)
       setRegistrationTxHash(null)
       setRegistrationInfo("")
       setRegistrationError("")
@@ -547,43 +614,41 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
     setStage(result === "pass" ? "ai_pass" : "ai_fail")
 
   const handleSign = async () => {
-    if (registrationLock.current || uploadedId === null) {
-      setRegistrationError("먼저 음원을 업로드하고 실제 검증·메타데이터 등록을 완료해 주세요.")
-      return
-    }
-    registrationLock.current = true
-    setRegistrationBusy(true)
-    setRegistrationError("")
-    setRegistrationInfo("")
+    // Also guard the handler: disabled buttons alone are not a policy boundary.
+    if (registrationLock.current || !uploadedId || !policy.eligible || !readiness?.ready || verificationBusy || preparing || refreshing) return
+    const id = uploadedId, version = selectionVersion.current
+    const isCurrent = () => version === selectionVersion.current
+    registrationLock.current = true; setRegistrationBusy(true)
+    setRegistrationError(""); setRegistrationInfo("")
     try {
+      const packet = await registrationPacket(id, api, isCurrent)
       const user = await auth.me()
-      const endpoint = `/api/tracks/${uploadedId}/registration/confirm`
+      if (!isCurrent()) return
+      const endpoint = `/api/tracks/${id}/registration/confirm`
       const pending = readPending(user.id).find(item => item.endpoint === endpoint)
       if (pending) {
         setRegistrationTxHash(pending.hash)
         setRegistrationInfo("기존 트랜잭션을 확인하는 중입니다.")
         await confirmPending(user.id, pending)
       } else {
-        const packet = await api(`/api/tracks/${uploadedId}/registration-payload`, {})
-        if (packet.ready !== true || !packet.transaction)
-          throw new Error("등록 준비가 완료되지 않았습니다. 기여도 확정, AI 검증, IPFS 메타데이터 상태를 확인해 주세요.")
         const hash = await sendTransaction(packet.transaction)
-        setRegistrationTxHash(hash)
         const record = { hash, endpoint, body: {}, label: "음원 온체인 등록" }
         savePending(user.id, record)
-        setRegistrationInfo("거래가 전송되었습니다. 블록 확인과 DB 반영을 기다리는 중입니다.")
+        if (isCurrent()) { setRegistrationTxHash(hash); setRegistrationInfo("거래가 전송되었습니다. 블록 확인과 DB 반영을 기다리는 중입니다.") }
         await confirmPending(user.id, record)
       }
-      setRegistrationInfo("온체인 등록 및 Backend 확인이 완료되었습니다.")
+      if (isCurrent()) { setRegistrationInfo("온체인 등록 및 Backend 확인이 완료되었습니다."); setReadiness(null) }
     } catch (error) {
-      setRegistrationError(error instanceof Error ? error.message : "등록 중 오류가 발생했습니다.")
-    } finally {
-      registrationLock.current = false
-      setRegistrationBusy(false)
-    }
+      if (isCurrent()) {
+        setReadiness(null); setRegistrationError(error instanceof Error ? error.message : "등록 중 오류가 발생했습니다.")
+        // A newer BLOCK/failure may have arrived since the button was enabled.
+        try { await refreshRegistration(id, version) } catch { /* keep registration disabled */ }
+      }
+    } finally { registrationLock.current = false; setRegistrationBusy(false) }
   }
 
   const handleReset = () => {
+    invalidateVerification()
     setStage("idle")
     setUploadedId(null)
     setAudioFile(null)
@@ -704,6 +769,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
                   onClick={(e) => {
                     e.stopPropagation()
                     if (uploading) return
+                    invalidateVerification()
                     setFileName("")
                     setAudioFile(null)
                     setUploadedId(null)
@@ -746,7 +812,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
 
           {/* Upload metadata */}
           <div className="bg-[#161b22] border border-[#21262d] rounded-xl p-5 space-y-3">
-            <label className="block text-xs text-[#9CA3AF]">음원 제목 *<input aria-label="음원 제목" value={title} onChange={e => { setTitle(e.target.value); setUploadedId(null) }} disabled={uploading} className="mt-2 w-full rounded-lg bg-[#1c2128] border border-[#30363d] p-2 text-white" /></label>
+            <label className="block text-xs text-[#9CA3AF]">음원 제목 *<input aria-label="음원 제목" value={title} onChange={e => { invalidateVerification(); setTitle(e.target.value); setUploadedId(null) }} disabled={uploading} className="mt-2 w-full rounded-lg bg-[#1c2128] border border-[#30363d] p-2 text-white" /></label>
             <label className="block text-xs text-[#9CA3AF]">작업 로그 (선택)<textarea aria-label="작업 로그" value={workLog} onChange={e => setWorkLog(e.target.value)} disabled={uploading} className="mt-2 w-full rounded-lg bg-[#1c2128] border border-[#30363d] p-2 text-white" /></label>
           </div>
           {/* Form */}
@@ -1141,12 +1207,13 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
               <button
                 type="button"
                 onClick={() => void handleRealVerification()}
-                disabled={verificationBusy}
+                disabled={verificationBusy || preparing || registrationBusy || policy.pending}
                 className="w-full rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {verificationBusy ? "기여도 확정 · 실제 AI 검증 중…" : "기여도 확정 · 실제 AI 검증"}
               </button>
               <p className="text-xs text-[#9CA3AF]">공동 창작자의 초대 수락과 지분 확정이 완료되어야 검증을 시작할 수 있습니다. 데모 판정은 사용하지 않습니다.</p>
+              <VerificationNotice verification={currentVerification} />
               {verificationMessage && <p role="status" className="text-xs text-blue-300">{verificationMessage}</p>}
               {verificationError && <p role="alert" className="text-xs text-red-400">{verificationError}</p>}
               </div>
@@ -1155,10 +1222,19 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
             <div className="space-y-3 rounded-xl border border-[#30363d] bg-[#161b22] p-4">
               <p role="status" className="text-sm text-emerald-400">비공개 임시 저장 완료 · ID: {uploadedId}</p>
               <p className="text-xs text-[#9CA3AF]">
-                실제 등록은 기여도 확정, AI 검증, IPFS 메타데이터 업로드 및 지갑 연결 후 가능합니다.
-                준비되지 않았다면 Backend가 거절하며 거래는 전송되지 않습니다.
+                IPFS 업로드·등록 준비와 실제 지갑 거래는 별도 단계입니다. Backend 준비 완료와 연결된 지갑·네트워크를 확인한 후에만 거래를 전송할 수 있습니다.
               </p>
-              <button type="button" onClick={() => void handleSign()} disabled={registrationBusy}
+              <button type="button" onClick={() => void handlePrepare()} disabled={!canPrepare || verificationBusy || preparing || registrationBusy || refreshing}
+                className="w-full rounded-xl border border-blue-500/40 px-4 py-3 text-sm text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed">
+                {preparing ? "IPFS 업로드 · 등록 준비 중…" : "IPFS 업로드 · 등록 준비"}
+              </button>
+              <div className="flex gap-3 text-xs text-blue-300">
+                <button type="button" disabled={refreshing || verificationBusy || preparing || registrationBusy} onClick={() => void handleRefresh()}>검증·등록 조건 새로고침</button>
+                <button type="button" disabled={refreshing || verificationBusy || preparing || registrationBusy} onClick={() => void handleRefresh(true)}>지갑 연결</button>
+                <button type="button" disabled={refreshing || verificationBusy || preparing || registrationBusy} onClick={() => void handleRefresh(false, true)}>Hardhat 네트워크로 전환</button>
+              </div>
+              {readiness && !readiness.ready && <p role="status" className="text-xs text-amber-300">등록 준비 필요: {missingText(readiness.missing)}</p>}
+              <button type="button" onClick={() => void handleSign()} disabled={registrationBusy || !policy.eligible || !readiness?.ready || verificationBusy || preparing || refreshing}
                 className="w-full rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">
                 {registrationBusy ? "등록 처리 중…" : registrationTxHash ? "온체인 등록 확인 / 재시도" : "실제 온체인 등록 (MetaMask)"}
               </button>

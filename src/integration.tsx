@@ -3,6 +3,8 @@ import { auth } from "./api";
 import { AuthError, type User } from "./auth";
 import { api, publicApi, connectWallet, sendTransaction, readPending, savePending, confirmPending, type ChainTransaction, type PendingTransaction } from "./api/service";
 import { trackView, type TrackView } from "./domain";
+import { latestVerification, verificationPolicy, missingText } from "./features/verification/policy";
+import { readRegistration, prepareRegistration, registrationPacket, type RegistrationState } from "./features/verification/registration";
 const errorText = (e: unknown) => e instanceof Error ? e.message : "요청을 완료하지 못했습니다.";
 function useController() {
   const [user, setUser] = useState<User | null>(null), [authLoading, setAuthLoading] = useState(true);
@@ -11,7 +13,8 @@ function useController() {
   const [selected, setSelected] = useState<TrackView | null>(null), [verification, setVerification] = useState<any>(null), [chain, setChain] = useState<any>(null);
   const [licenses, setLicenses] = useState<any[]>([]), [transactions, setTransactions] = useState<any[]>([]), [revenue, setRevenue] = useState<any>(null), [receipt, setReceipt] = useState<any>(null);
   const [pending, setPending] = useState<PendingTransaction[]>([]), [draftId, setDraftId] = useState<number | null>(null);
-  const lock = useRef(false), generation = useRef(0);
+  const lock = useRef(false), generation = useRef(0), selectionVersion = useRef(0);
+  const [registration, setRegistration] = useState<RegistrationState | null>(null);
   async function refresh(who: User | null = user) {
     const epoch = generation.current; setLoading(true);
     try {
@@ -41,9 +44,18 @@ function useController() {
     try { return await action(); } catch (e) { setError(errorText(e)); throw e; } finally { lock.current = false; setBusy(""); if (user) setPending(readPending(user.id)); }
   }
   async function select(view: TrackView) {
+    const version = ++selectionVersion.current;
+    setSelected(null); setVerification(null); setChain(null); setRegistration(null);
     const track = user ? await api(`/api/tracks/${view.id}`) : await publicApi(`/api/tracks/${view.id}`);
-    setSelected(trackView(track, view.listing)); setVerification(track.verifications?.[0] || null);
-    setChain(user?.id === track.ownerId ? await api(`/api/tracks/${view.id}/blockchain`) : { registrationStatus: track.registrationStatus, txHash: track.registrationTxHash, blockchainTrackId: track.blockchainTrackId });
+    if (version !== selectionVersion.current) return;
+    setSelected(trackView(track, view.listing)); setVerification(latestVerification(track.verifications, view.id));
+    const selectedChain = user?.id === track.ownerId ? await api(`/api/tracks/${view.id}/blockchain`) : { registrationStatus: track.registrationStatus, txHash: track.registrationTxHash, blockchainTrackId: track.blockchainTrackId };
+    if (version !== selectionVersion.current) return;
+    setChain(selectedChain);
+    if (user?.id === track.ownerId && verificationPolicy(latestVerification(track.verifications, view.id)).eligible) {
+      const state = await readRegistration(view.id);
+      if (version === selectionVersion.current) setRegistration(state);
+    }
   }
   async function bind() { if (!user) throw new Error("먼저 로그인해 주세요."); const address = await connectWallet(); setWallet(address); return address; }
   async function send(tx: ChainTransaction, endpoint: string, body: Record<string, unknown>, label: string) {
@@ -66,17 +78,22 @@ function useController() {
     if (result.status !== "VERIFIED") throw new Error(`AI 검증 실패: ${result.errorCode || "서버를 확인해 주세요"}`);
     return result;
   }
+  async function prepare(view = selected) {
+    if (!view || !verificationPolicy(latestVerification(view.raw.verifications, view.id)).eligible) throw new Error("등록 가능한 실제 AI 판정을 확인해 주세요.");
+    const version = selectionVersion.current;
+    setRegistration(null);
+    await prepareRegistration(view.id, api, () => version === selectionVersion.current);
+    if (version === selectionVersion.current) await select(view);
+  }
   async function register(view = selected) {
-    if (!view) throw new Error("등록할 음원을 선택해 주세요.");
-    const id = view.id, current = await api(`/api/tracks/${id}/blockchain`);
-    if (current.registrationStatus !== "REGISTERED") {
-      if (current.registrationStatus !== "PENDING") { await api(`/api/tracks/${id}/metadata/prepare`, {}); await api(`/api/tracks/${id}/metadata/upload`, {}); }
-      const packet = await api(`/api/tracks/${id}/registration-payload`, {});
-      if (!packet.ready) throw new Error(`등록 준비 필요: ${(packet.missing || []).join(", ")}`);
-      await send(packet.transaction, `/api/tracks/${id}/registration/confirm`, {}, `음원 ${id} 등록`);
-    }
-    await select(view); await refresh();
-    return api(`/api/tracks/${id}/blockchain`);
+    if (!view || !verificationPolicy(latestVerification(view.raw.verifications, view.id)).eligible) throw new Error("등록 가능한 실제 AI 판정을 확인해 주세요.");
+    if (!registration?.ready || registration.track.id !== view.id) throw new Error(`등록 준비 필요: ${missingText(registration?.missing || ['backendReady'])}`);
+    const version = selectionVersion.current;
+    setRegistration(null);
+    const packet = await registrationPacket(view.id, api, () => version === selectionVersion.current);
+    await send(packet.transaction, `/api/tracks/${view.id}/registration/confirm`, {}, `음원 ${view.id} 등록`);
+    if (version === selectionVersion.current) { await select(view); await refresh(); }
+    return api(`/api/tracks/${view.id}/blockchain`);
   }
   async function setPrice(price: string) {
     if (!selected) throw new Error("음원을 선택해 주세요.");
@@ -89,6 +106,8 @@ function useController() {
   }
   async function buy() {
     if (!selected?.listing || !user) throw new Error("로그인 후 판매 중인 음원을 선택해 주세요.");
+    const current = await api(`/api/tracks/${selected.id}`);
+    if (!verificationPolicy(latestVerification(current.verifications, selected.id)).purchasable) throw new Error("이 음원의 AI 판정으로는 구매할 수 없습니다.");
     const key = `track-ai-buy:${user.id}:${selected.id}`; let idempotencyKey = localStorage.getItem(key);
     if (!idempotencyKey) { idempotencyKey = crypto.randomUUID(); localStorage.setItem(key, idempotencyKey); }
     const packet = await api("/api/licenses/purchase", { trackId: selected.id, idempotencyKey });
@@ -99,9 +118,9 @@ function useController() {
     const packet = await api("/api/revenue/withdraw", { idempotencyKey: crypto.randomUUID() });
     const result = await send(packet.transaction, "/api/revenue/withdraw/confirm", { requestId: packet.id }, "수익 출금"); await refresh(); return result;
   }
-  async function logout() { await auth.logout(); generation.current++; setUser(null); setWallet(""); setMine([]); setListings([]); setLicenses([]); setTransactions([]); setRevenue(null); setPending([]); setSelected(null); setVerification(null); setChain(null); setReceipt(null); setDraftId(null); }
+  async function logout() { await auth.logout(); generation.current++; setUser(null); setWallet(""); setMine([]); setListings([]); setLicenses([]); setTransactions([]); setRevenue(null); setPending([]); setSelected(null); setVerification(null); setChain(null); setRegistration(null); selectionVersion.current++; setReceipt(null); setDraftId(null); }
   async function retry(item: PendingTransaction) { if (!user) throw new Error("로그인이 필요합니다."); const result = await confirmPending(user.id, item); if (item.endpoint === "/api/licenses/purchase/confirm") setReceipt(result); await refresh(); if (selected) await select(selected); }
-  return { user, setUser, authLoading, wallet, busy, error, setError, loading, tracks, mine, listings, selected, verification, chain, licenses, transactions, revenue, receipt, pending, draftId, setDraftId, refresh, operation, select, bind, verifyDraft, register, setPrice, buy, withdraw, logout, retry };
+  return { user, setUser, authLoading, wallet, busy, error, setError, loading, tracks, mine, listings, selected, verification, chain, registration, licenses, transactions, revenue, receipt, pending, draftId, setDraftId, refresh, operation, select, bind, verifyDraft, prepare, register, setPrice, buy, withdraw, logout, retry };
 }
 const ServiceContext = createContext<ReturnType<typeof useController> | null>(null);
 export function ServiceProvider({ children }: { children: ReactNode }) { const service = useController(); return <ServiceContext.Provider value={service}>{children}</ServiceContext.Provider>; }
