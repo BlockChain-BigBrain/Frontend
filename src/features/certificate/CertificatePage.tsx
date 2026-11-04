@@ -17,7 +17,6 @@ export default function CertificateScreen({
     { num: "02", title: "Layer 2 음악적 관계 분석", desc: "중복이 아닌 음원의 CLAP 후보와 음악적 관계를 분석합니다.", detail: "query-level / pairwise temporal 검증" },
     { num: "03", title: "정책 판정 및 증거 기록", desc: "서버 판정과 모델·정책 버전을 기록합니다.", detail: "임계값과 검증 증거는 실제 AI 응답을 기준으로 확인" },
   ]
-  const top3: { title: string; similarity: number; model: string }[] = []
 
   return (
     <div className="pt-14 min-h-screen">
@@ -255,44 +254,14 @@ export default function CertificateScreen({
                     <div className="text-xs font-medium text-[#9CA3AF] mb-2">
                       최근접 Top-3 음원
                     </div>
-                    <div className="space-y-1.5">
-                      {top3.map((t, i) => (
-                        <div
-                          key={t.title}
-                          className="flex items-center gap-3 bg-[#1c2128] rounded-lg px-3 py-1.5 border border-[#30363d]"
-                        >
-                          <span className="text-[10px] font-mono text-[#9CA3AF] w-3">
-                            {i + 1}
-                          </span>
-                          <div className="flex-1">
-                            <span className="text-xs text-white">
-                              {t.title}
-                            </span>
-                            <span className="text-[10px] text-[#9CA3AF] font-mono ml-2">
-                              {t.model}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-14 h-1 rounded-full bg-[#30363d] overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-emerald-500"
-                                style={{ width: `${t.similarity * 100}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-xs font-mono text-emerald-400 w-8 text-right">
-                              {t.similarity.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-xs text-[#9CA3AF]">후보 음원 데이터가 제공되지 않았습니다. 실제 검증 결과에서 확인하세요.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono">
                     <span className="text-[#9CA3AF]">IPFS CID:</span>
-                    <span className="text-blue-400">QmXz9f4aKp8...mN3d</span>
+                    <span className="text-blue-400">미제공</span>
                     <span className="text-[#484f58]">·</span>
                     <span className="text-[#9CA3AF]">온체인 해시:</span>
-                    <span className="text-blue-400">0x4aC7...f3E2</span>
+                    <span className="text-blue-400">미제공</span>
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -300,7 +269,7 @@ export default function CertificateScreen({
                     {chainResult.similarityScore?.toFixed(2) ?? "—"}
                   </div>
                   <div className="text-[10px] text-[#9CA3AF]">
-                    Cosine Similarity
+                    AI 점수 (서버 제공)
                   </div>
                   <div className="mt-1 w-20 h-2 rounded-full bg-[#30363d] overflow-hidden">
                     <div
