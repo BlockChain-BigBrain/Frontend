@@ -14,12 +14,7 @@ export function browserWallet(): WalletProvider {
     throw new Error("MetaMask 등 지갑 확장 프로그램을 설치해 주세요.")
   return provider
 }
-export async function sendTransaction(
-  tx: ChainTransaction,
-  provider = browserWallet(),
-): Promise<string> {
-  if (tx.chainId !== "31337")
-    throw new Error("로컬 Hardhat 네트워크만 지원합니다.")
+export async function switchToHardhat(provider = browserWallet()): Promise<void> {
   const chainId = "0x7a69"
   if ((await provider.request({ method: "eth_chainId" })) !== chainId) {
     try {
@@ -40,10 +35,24 @@ export async function sendTransaction(
           },
         ],
       })
+      // Adding a network does not guarantee that MetaMask selects it.
+      if ((await provider.request({ method: "eth_chainId" })) !== chainId) {
+        try {
+          await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] })
+        } catch { throw new Error("Hardhat 네트워크로 전환해 주세요.") }
+      }
     }
   }
   if ((await provider.request({ method: "eth_chainId" })) !== chainId)
     throw new Error("Hardhat 네트워크로 전환해 주세요.")
+}
+export async function sendTransaction(
+  tx: ChainTransaction,
+  provider = browserWallet(),
+): Promise<string> {
+  if (tx.chainId !== "31337")
+    throw new Error("로컬 Hardhat 네트워크만 지원합니다.")
+  await switchToHardhat(provider)
   const accounts = await provider.request({ method: "eth_requestAccounts" })
   if (accounts[0]?.toLowerCase() !== tx.from.toLowerCase())
     throw new Error("계정에 연결한 지갑을 선택해 주세요.")
