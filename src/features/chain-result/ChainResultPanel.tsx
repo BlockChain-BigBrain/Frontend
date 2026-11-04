@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { HOLD_POLICY, MOCK_NETWORK, THRESHOLD } from "../../shared/config/constants"
+import { HOLD_POLICY, MOCK_NETWORK } from "../../shared/config/constants"
 import type {
   ChainResult,
   FailureReason,
@@ -388,43 +388,16 @@ export default function ChainResultPanel({
 
         <PanelRow
           label="Similarity Score"
-          description="Pairwise temporal score와 query-level verifier score를 분리해 표시합니다. WARN 0.351229 · HOLD 0.947200"
+          description="이 값은 단일 유사도 점수입니다. WARN(query-level)과 HOLD(pairwise temporal)는 서로 다른 지표이므로 하나의 임계값 막대로 비교하지 않습니다."
         >
           {score !== null ? (
-            <div className="w-full max-w-[230px]">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-xs font-bold font-mono text-white">
-                  {score.toFixed(2)}
-                </span>
-                <ValueBadge tone={aiTone}>{AI_LABELS[result.aiStatus]}</ValueBadge>
-              </div>
-              <div className="relative flex h-1.5 overflow-visible rounded-full">
-                <div
-                  className="rounded-l-full bg-emerald-500"
-                  style={{ width: `${THRESHOLD.warn * 100}%` }}
-                />
-                <div
-                  className="bg-amber-500"
-                  style={{
-                    width: `${(THRESHOLD.hold - THRESHOLD.warn) * 100}%`,
-                  }}
-                />
-                <div
-                  className="rounded-r-full bg-red-500"
-                  style={{ width: `${(1 - THRESHOLD.hold) * 100}%` }}
-                />
-                <span
-                  className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#0d1117] bg-white"
-                  style={{ left: `${score * 100}%` }}
-                />
-              </div>
-              <div className="mt-1 text-right text-[8px] text-[#6B7280]">
-                계약 판정 기준 · WARN {THRESHOLD.warn.toFixed(2)} · HOLD{" "}
-                {THRESHOLD.hold.toFixed(2)}
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold font-mono text-white">{score.toFixed(2)}</span>
+              <ValueBadge tone={aiTone}>{AI_LABELS[result.aiStatus]}</ValueBadge>
+              <span className="text-[10px] text-[#9CA3AF]">서버 판정 기준 적용</span>
             </div>
           ) : (
-            <span className="text-xs font-mono text-[#6B7280]">—</span>
+            <span className="text-xs font-mono text-[#6B7280]">점수 미산출 —</span>
           )}
         </PanelRow>
 
