@@ -1,6 +1,6 @@
 import { auth } from "../../api"
 import { AuthError } from "../../auth"
-import { api } from "../../api/service"
+import { api, sendTransaction, savePending, readPending, confirmPending } from "../../api/service"
 import { useEffect, useRef, useState } from "react"
 import ChainResultPanel from "../chain-result/ChainResultPanel"
 import Badge from "../../shared/components/Badge"
@@ -452,9 +452,17 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
     }
   }
 
+  const [registrationBusy, setRegistrationBusy] = useState(false)
+  const [registrationError, setRegistrationError] = useState("")
+  const [registrationInfo, setRegistrationInfo] = useState("")
+  const [registrationTxHash, setRegistrationTxHash] = useState<string | null>(null)
+  const registrationLock = useRef(false)
   function selectAudio(file: File | undefined) {
     if (!file || uploadLock.current) return
     setUploadedId(null)
+    setRegistrationTxHash(null)
+    setRegistrationInfo("")
+    setRegistrationError("")
     if (!/\.(mp3|wav|webm)$/i.test(file.name) || file.size > 100 * 1024 * 1024 || file.size === 0) {
       setUploadError("100MB 이하의 비어 있지 않은 MP3, WAV 또는 WebM 파일을 선택해 주세요.")
       return
@@ -487,6 +495,9 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
       const track = await api("/api/tracks", form)
       if (!Number.isInteger(track.id) || track.id <= 0) throw new Error("서버의 업로드 응답을 확인해 주세요.")
       setUploadedId(track.id)
+      setRegistrationTxHash(null)
+      setRegistrationInfo("")
+      setRegistrationError("")
     } catch (error) {
       setUploadError(error instanceof AuthError ? "먼저 로그인해 주세요." : error instanceof Error ? error.message : "업로드에 실패했습니다.")
     } finally { uploadLock.current = false; setUploading(false) }
@@ -535,13 +546,50 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const handleAIDone = (result: "pass" | "fail") =>
     setStage(result === "pass" ? "ai_pass" : "ai_fail")
 
-  const handleSign = () => {
-    setStage("signing")
-    setTimeout(() => setStage("done"), 2200)
+  const handleSign = async () => {
+    if (registrationLock.current || uploadedId === null) {
+      setRegistrationError("먼저 음원을 업로드하고 실제 검증·메타데이터 등록을 완료해 주세요.")
+      return
+    }
+    registrationLock.current = true
+    setRegistrationBusy(true)
+    setRegistrationError("")
+    setRegistrationInfo("")
+    try {
+      const user = await auth.me()
+      const endpoint = `/api/tracks/${uploadedId}/registration/confirm`
+      const pending = readPending(user.id).find(item => item.endpoint === endpoint)
+      if (pending) {
+        setRegistrationTxHash(pending.hash)
+        setRegistrationInfo("기존 트랜잭션을 확인하는 중입니다.")
+        await confirmPending(user.id, pending)
+      } else {
+        const packet = await api(`/api/tracks/${uploadedId}/registration-payload`, {})
+        if (packet.ready !== true || !packet.transaction)
+          throw new Error("등록 준비가 완료되지 않았습니다. 기여도 확정, AI 검증, IPFS 메타데이터 상태를 확인해 주세요.")
+        const hash = await sendTransaction(packet.transaction)
+        setRegistrationTxHash(hash)
+        const record = { hash, endpoint, body: {}, label: "음원 온체인 등록" }
+        savePending(user.id, record)
+        setRegistrationInfo("거래가 전송되었습니다. 블록 확인과 DB 반영을 기다리는 중입니다.")
+        await confirmPending(user.id, record)
+      }
+      setRegistrationInfo("온체인 등록 및 Backend 확인이 완료되었습니다.")
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : "등록 중 오류가 발생했습니다.")
+    } finally {
+      registrationLock.current = false
+      setRegistrationBusy(false)
+    }
   }
 
   const handleReset = () => {
     setStage("idle")
+    setUploadedId(null)
+    setAudioFile(null)
+    setRegistrationTxHash(null)
+    setRegistrationInfo("")
+    setRegistrationError("")
     setFileName("")
     setInvitations([])
     setInviteInfo("")
@@ -1101,6 +1149,22 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
               <p className="text-xs text-[#9CA3AF]">공동 창작자의 초대 수락과 지분 확정이 완료되어야 검증을 시작할 수 있습니다. 데모 판정은 사용하지 않습니다.</p>
               {verificationMessage && <p role="status" className="text-xs text-blue-300">{verificationMessage}</p>}
               {verificationError && <p role="alert" className="text-xs text-red-400">{verificationError}</p>}
+              </div>
+            )}
+          {uploadedId !== null && (
+            <div className="space-y-3 rounded-xl border border-[#30363d] bg-[#161b22] p-4">
+              <p role="status" className="text-sm text-emerald-400">비공개 임시 저장 완료 · ID: {uploadedId}</p>
+              <p className="text-xs text-[#9CA3AF]">
+                실제 등록은 기여도 확정, AI 검증, IPFS 메타데이터 업로드 및 지갑 연결 후 가능합니다.
+                준비되지 않았다면 Backend가 거절하며 거래는 전송되지 않습니다.
+              </p>
+              <button type="button" onClick={() => void handleSign()} disabled={registrationBusy}
+                className="w-full rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">
+                {registrationBusy ? "등록 처리 중…" : registrationTxHash ? "온체인 등록 확인 / 재시도" : "실제 온체인 등록 (MetaMask)"}
+              </button>
+              {registrationTxHash && <p className="break-all text-xs text-blue-400">TX: {registrationTxHash}</p>}
+              {registrationInfo && <p role="status" className="text-sm text-emerald-400">{registrationInfo}</p>}
+              {registrationError && <p role="alert" className="text-sm text-red-400">{registrationError}</p>}
             </div>
           )}
         </div>
