@@ -423,7 +423,6 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState("")
   const [uploadedId, setUploadedId] = useState<number | null>(null)
-<<<<<<< HEAD
   const [verificationBusy, setVerificationBusy] = useState(false)
   const [verificationMessage, setVerificationMessage] = useState("")
   const [verificationError, setVerificationError] = useState("")
@@ -453,13 +452,11 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
     }
   }
 
-=======
   const [registrationBusy, setRegistrationBusy] = useState(false)
   const [registrationError, setRegistrationError] = useState("")
   const [registrationInfo, setRegistrationInfo] = useState("")
   const [registrationTxHash, setRegistrationTxHash] = useState<string | null>(null)
   const registrationLock = useRef(false)
->>>>>>> cba0b14 (feat(frontend): connect registration payload MetaMask transaction and confirmation)
   function selectAudio(file: File | undefined) {
     if (!file || uploadLock.current) return
     setUploadedId(null)
@@ -1138,7 +1135,6 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
             {uploading ? "음원 업로드 중…" : uploadedId !== null ? "업로드 완료" : "음원 업로드"}
           </button>
           {uploadError && <p role="alert" className="text-sm text-red-400">{uploadError}</p>}
-<<<<<<< HEAD
           {uploadedId !== null && <p role="status" className="text-sm text-emerald-400">비공개 임시 저장 완료 · ID: {uploadedId} (기여자 동의·AI 검증·온체인 등록 전)</p>}
           {uploadedId !== null && (
             <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-4 space-y-2">
@@ -1153,7 +1149,8 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
               <p className="text-xs text-[#9CA3AF]">공동 창작자의 초대 수락과 지분 확정이 완료되어야 검증을 시작할 수 있습니다. 데모 판정은 사용하지 않습니다.</p>
               {verificationMessage && <p role="status" className="text-xs text-blue-300">{verificationMessage}</p>}
               {verificationError && <p role="alert" className="text-xs text-red-400">{verificationError}</p>}
-=======
+              </div>
+            )}
           {uploadedId !== null && (
             <div className="space-y-3 rounded-xl border border-[#30363d] bg-[#161b22] p-4">
               <p role="status" className="text-sm text-emerald-400">비공개 임시 저장 완료 · ID: {uploadedId}</p>
@@ -1168,7 +1165,6 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
               {registrationTxHash && <p className="break-all text-xs text-blue-400">TX: {registrationTxHash}</p>}
               {registrationInfo && <p role="status" className="text-sm text-emerald-400">{registrationInfo}</p>}
               {registrationError && <p role="alert" className="text-sm text-red-400">{registrationError}</p>}
->>>>>>> cba0b14 (feat(frontend): connect registration payload MetaMask transaction and confirmation)
             </div>
           )}
         </div>
