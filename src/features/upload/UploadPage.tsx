@@ -423,6 +423,35 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState("")
   const [uploadedId, setUploadedId] = useState<number | null>(null)
+  const [verificationBusy, setVerificationBusy] = useState(false)
+  const [verificationMessage, setVerificationMessage] = useState("")
+  const [verificationError, setVerificationError] = useState("")
+  async function handleRealVerification() {
+    if (!uploadedId || verificationBusy) return
+    setVerificationBusy(true)
+    setVerificationError("")
+    setVerificationMessage("기여도 확정 상태를 확인하는 중…")
+    try {
+      const track = await api(`/api/tracks/${uploadedId}`)
+      if (!track.contributionsFinalizedAt) {
+        await api(`/api/tracks/${uploadedId}/contributors/finalize`, {})
+      }
+      setVerificationMessage("실제 AI 서버에서 음원을 검증하는 중…")
+      const latest = await api(`/api/tracks/${uploadedId}`)
+      const verified = latest.verifications?.some((v: { status: string }) => v.status === "VERIFIED")
+      const result = await api(`/api/tracks/${uploadedId}/${verified ? "reverify" : "verify"}`, {})
+      const decision = result.evidence?.decision || result.riskStatus || "결과 확인 필요"
+      setVerificationMessage(result.status === "VERIFIED"
+        ? `AI 검증 완료 · ${decision}. 다음 단계에서 IPFS 저장 및 온체인 등록을 진행하세요.`
+        : `AI 검증 상태: ${result.status || "확인 필요"} · ${result.errorCode || decision}`)
+    } catch (error) {
+      setVerificationMessage("")
+      setVerificationError(error instanceof Error ? error.message : "기여도 확정 또는 AI 검증에 실패했습니다.")
+    } finally {
+      setVerificationBusy(false)
+    }
+  }
+
   function selectAudio(file: File | undefined) {
     if (!file || uploadLock.current) return
     setUploadedId(null)
@@ -1059,6 +1088,21 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
           </button>
           {uploadError && <p role="alert" className="text-sm text-red-400">{uploadError}</p>}
           {uploadedId !== null && <p role="status" className="text-sm text-emerald-400">비공개 임시 저장 완료 · ID: {uploadedId} (기여자 동의·AI 검증·온체인 등록 전)</p>}
+          {uploadedId !== null && (
+            <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => void handleRealVerification()}
+                disabled={verificationBusy}
+                className="w-full rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {verificationBusy ? "기여도 확정 · 실제 AI 검증 중…" : "기여도 확정 · 실제 AI 검증"}
+              </button>
+              <p className="text-xs text-[#9CA3AF]">공동 창작자의 초대 수락과 지분 확정이 완료되어야 검증을 시작할 수 있습니다. 데모 판정은 사용하지 않습니다.</p>
+              {verificationMessage && <p role="status" className="text-xs text-blue-300">{verificationMessage}</p>}
+              {verificationError && <p role="alert" className="text-xs text-red-400">{verificationError}</p>}
+            </div>
+          )}
         </div>
       </div>
 
