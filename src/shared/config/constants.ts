@@ -1,6 +1,7 @@
 export const THRESHOLD = {
-  warn: 0.351229127861893,
-  hold: 0.9471999941293027,
+  // Legacy UI fallback only. Do not use these to classify live AI results.
+  warn: 0.8,
+  hold: 0.85,
 } as const
 
 export const HOLD_POLICY: "ONCHAIN_RECORD" | "BLOCK_BEFORE_REGISTER" =
