@@ -1,45 +1,52 @@
 import { useEffect, useState } from "react"
 import { API_BASE } from "../../api/service"
-import { AI_POLICY, THRESHOLD } from "../../shared/config/constants"
 import { NETWORK } from "../../shared/config/network"
 import type { Screen } from "../../shared/types/domain"
 import TrackCard from "./TrackCard"
-import { tracks } from "./mockTracks"
+import type { PublicTrack } from "./tracks"
 
 // ─── Marketplace ────────────────────────────────────────────────────────────────
-export default function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+export default function MarketplaceScreen(_props: { setScreen: (s: Screen) => void }) {
   const [search, setSearch] = useState("")
-  const [liveTracks, setLiveTracks] = useState<Array<{ id: number; title: string; registrationStatus?: string; createdAt?: string }>>([])
+  const [liveTracks, setLiveTracks] = useState<PublicTrack[]>([])
   const [liveError, setLiveError] = useState("")
   const [liveLoading, setLiveLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${API_BASE}/api/tracks?scope=public&limit=20`, { signal: controller.signal })
+    setLiveLoading(true)
+    setLiveError("")
+    fetch(`${API_BASE}/api/tracks?scope=public&limit=20&page=${page}`, { signal: controller.signal, cache: "no-store" })
       .then(async response => {
         if (!response.ok) throw new Error(`음원 목록 조회 실패 (${response.status})`)
         const data: unknown = await response.json()
         if (!Array.isArray(data)) throw new Error("잘못된 음원 목록 응답")
-        setLiveTracks(data.filter((item): item is { id: number; title: string; registrationStatus?: string; createdAt?: string } =>
-          !!item && typeof item === "object" && typeof item.id === "number" && typeof item.title === "string"))
+        setTotal(Number(response.headers.get("X-Total-Count")) || data.length)
+        const tracks = data.filter((item): item is PublicTrack =>
+          !!item && typeof item === "object" && typeof item.id === "number" && typeof item.title === "string" && item.isPublic === true)
+        const details = await Promise.all(tracks.map(async track => {
+          try {
+            const response = await fetch(`${API_BASE}/api/tracks/${track.id}`, { signal: controller.signal, cache: "no-store" })
+            if (!response.ok) throw new Error("상세 정보 조회 실패")
+            const detail = await response.json()
+            if (detail.id !== track.id || detail.isPublic !== true || !Array.isArray(detail.verifications)) throw new Error("잘못된 상세 응답")
+            return { ...track, ...detail } as PublicTrack
+          } catch {
+            return { ...track, verificationUnavailable: true }
+          }
+        }))
+        if (!controller.signal.aborted) setLiveTracks(details)
       })
       .catch(error => { if (!controller.signal.aborted) setLiveError(error instanceof Error ? error.message : "음원을 불러오지 못했습니다.") })
       .finally(() => { if (!controller.signal.aborted) setLiveLoading(false) })
     return () => controller.abort()
-  }, [])
+  }, [page])
   const [filter, setFilter] = useState("All")
-  const genres = [
-    "All",
-    "Electronic",
-    "Ambient",
-    "Lo-Fi",
-    "Cinematic",
-    "Techno",
-    "Dark Ambient",
-  ]
-  const filtered = tracks.filter(
-    (t) =>
-      (filter === "All" || t.genre === filter) &&
-      (search === "" || t.title.toLowerCase().includes(search.toLowerCase())),
+  const genres = ["All", "MP3", "WebM", "WAV"]
+  const filtered = liveTracks.filter(t =>
+    (filter === "All" || (filter === "MP3" ? t.mimeType === "audio/mpeg" : filter === "WebM" ? t.mimeType?.endsWith("/webm") : t.mimeType === "audio/wav")) &&
+    t.title.toLowerCase().includes(search.toLowerCase()),
   )
 
   return (
@@ -48,9 +55,9 @@ export default function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#30363d] bg-[#161b22] text-xs text-[#9CA3AF] font-mono mb-5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-            {NETWORK.name} · 1,247 트랙 온체인 등록
+            {NETWORK.name} · 공개 음원 {total}개
             <span className="text-[9px] text-blue-400 border border-blue-500/30 rounded px-1">
-              예시 데이터
+              실제 업로드
             </span>
           </div>
           <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
@@ -91,44 +98,28 @@ export default function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="트랙 제목, AI 모델, 장르 검색..."
+              placeholder="현재 페이지의 트랙 제목 검색..."
               className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-[#161b22] border border-[#30363d] text-sm text-white placeholder-[#9CA3AF] focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
         </div>
       </div>
-      <section className="max-w-6xl mx-auto px-6 pt-8">
-        <h2 className="text-lg font-semibold text-white mb-3">실제 등록 음원 <span className="text-xs text-blue-400">Backend API</span></h2>
-        {liveLoading && <p role="status" className="text-sm text-[#9CA3AF]">서버에서 음원을 불러오는 중…</p>}
-        {liveError && <p role="alert" className="text-sm text-red-400">서버 연결 오류: {liveError}</p>}
-        {!liveLoading && !liveError && liveTracks.length === 0 && <p className="text-sm text-[#9CA3AF]">공개된 실제 음원이 아직 없습니다.</p>}
-        <div className="grid gap-3 md:grid-cols-3">
-          {liveTracks.filter(t => t.title.toLowerCase().includes(search.toLowerCase())).map(track => (
-            <article key={track.id} className="rounded-xl border border-[#30363d] bg-[#161b22] p-4">
-              <h3 className="font-medium text-white">{track.title}</h3>
-              <p className="mt-2 text-xs text-[#9CA3AF]">음원 ID: {track.id} · 등록 상태: {track.registrationStatus || "확인 중"}</p>
-              <audio controls preload="none" className="mt-3 w-full" src={`${API_BASE}/api/tracks/${track.id}/audio`} />
-            </article>
-          ))}
-        </div>
-      </section>
       <div className="border-b border-[#21262d] bg-[#0d1117]">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-6 text-xs font-mono text-[#9CA3AF]">
+        <div className="max-w-6xl mx-auto px-6 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-mono text-[#9CA3AF]">
           {[
-            ["Total Volume", `842,400 ${NETWORK.currencySymbol}`],
-            ["트랙 등록", "1,247"],
-            ["활성 크리에이터", "386명"],
+            ["공개 음원", String(total)],
+            ["AI 검증", "미연결"],
+            ["온체인 등록", "자동 실행 안 함"],
           ].map(([k, v]) => (
             <div key={k} className="flex items-center gap-2">
               <span>{k}</span>
               <span className="text-white font-semibold">{v}</span>
-              <span className="text-[9px] text-blue-400">예시 데이터</span>
             </div>
           ))}
         </div>
       </div>
       <div className="max-w-6xl mx-auto px-6 py-6">
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           {[
             ["01", "유사도 검증", "Fingerprint + LAION-CLAP"],
             ["02", "온체인 기록", `${NETWORK.name} · ERC-1155`],
@@ -163,36 +154,18 @@ export default function MarketplaceScreen({ setScreen }: { setScreen: (s: Screen
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-4 mb-3 rounded-lg border border-[#21262d] bg-[#161b22] px-3 py-2 text-[10px] text-[#9CA3AF]">
-          <span>
-            <b className="text-emerald-400">PASS</b> 정산 정상
-          </span>
-          <span>
-            <b className="text-amber-400">WARN</b> 구매자 확인 필요
-          </span>
-          <span>
-            <b className="text-orange-400">HOLD</b> 구매·발급 제한
-          </span>
-          <span className="ml-auto font-mono">
-            기준 {THRESHOLD.warn.toFixed(2)} / {THRESHOLD.hold.toFixed(2)} ·
-            예시 데이터
-          </span>
+        <p className="mb-3 text-xs text-[#9CA3AF]">실제 업로드된 공개 음원 · AI v5 검증 미연결</p>
+        {liveLoading && <p role="status" className="py-10 text-center text-[#9CA3AF]">서버에서 음원을 불러오는 중…</p>}
+        {liveError && <p role="alert" className="py-10 text-center text-red-400">서버 연결 오류: {liveError}</p>}
+        {!liveLoading && !liveError && filtered.length === 0 && <p role="status" className="py-16 text-center rounded-xl border border-[#21262d] text-[#9CA3AF]">{liveTracks.length ? "검색 조건에 맞는 음원이 없습니다." : "공개된 음원이 아직 없습니다. Upload에서 첫 음원을 등록해 주세요."}</p>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {!liveLoading && !liveError && filtered.map(track => <TrackCard key={track.id} track={track} />)}
         </div>
-        <p className="-mt-2 mb-3 text-right text-[9px] text-[#6B7280]">
-          AI 분석 정책 {AI_POLICY.model} · {AI_POLICY.embeddingDimensions}-dim · {AI_POLICY.metric}
-        </p>
-        <div className="grid grid-cols-3 gap-4">
-          {filtered.map((track) => (
-            <TrackCard
-              key={track.id}
-              track={track}
-              onClick={() => setScreen("detail")}
-              onBuy={() => {
-                if (track.status !== "hold") setScreen("checkout")
-              }}
-            />
-          ))}
-        </div>
+        {total > 20 && <div className="flex justify-center gap-4 mt-6 text-sm text-white">
+          <button disabled={page === 1 || liveLoading} onClick={() => setPage(p => p - 1)}>이전</button>
+          <span>{page} / {Math.ceil(total / 20)}</span>
+          <button disabled={page * 20 >= total || liveLoading} onClick={() => setPage(p => p + 1)}>다음</button>
+        </div>}
       </div>
     </div>
   )

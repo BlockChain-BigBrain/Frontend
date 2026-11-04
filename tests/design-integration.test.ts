@@ -22,9 +22,10 @@ test("design-v3 shows public backend tracks and requires login before wallet lin
     const path = new URL(String(url)).pathname;
     requests.push(path);
     if (path === "/api/v1/auth/refresh") return new Response(JSON.stringify({ message: "Login required" }), { status: 401 });
+    if (path === "/api/tracks/42") return new Response(JSON.stringify({ id: 42, isPublic: true, audioPath: "/api/tracks/42/audio", verifications: [] }));
     if (path === "/api/tracks") {
       assert.equal(new URL(String(url)).searchParams.get("scope"), "public");
-      return new Response(JSON.stringify([{ id: 42, title: "Actual Track", registrationStatus: "NOT_REGISTERED" }]), { status: 200 });
+      return new Response(JSON.stringify([{ id: 42, title: "Actual Track", isPublic: true, mimeType: "audio/mpeg", registrationStatus: "NOT_REGISTERED" }]), { status: 200 });
     }
     throw new Error(`Unexpected request: ${init.method || "GET"} ${path}`);
   };
@@ -37,6 +38,8 @@ test("design-v3 shows public backend tracks and requires login before wallet lin
     await act(async () => { root.render(createElement(App)); await tick(); });
     assert.match(document.body.textContent || "", /Web3 마켓/);
     assert.match(document.body.textContent || "", /Actual Track/);
+    assert.doesNotMatch(document.body.textContent || "", /Neon Cascade|Ambient Drift 01|Lo-Fi Morning|Synthetic Pulse|Void Echoes|Solar Wind/);
+    assert.match(document.body.textContent || "", /AI 검증 미실시/);
     assert.ok(document.querySelector('audio[src$="/api/tracks/42/audio"]'), "real track has an audio endpoint");
     assert.ok(requests.includes("/api/tracks"));
 

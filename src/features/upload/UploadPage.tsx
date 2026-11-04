@@ -438,18 +438,23 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   async function handleUpload() {
     if (uploadLock.current) return
     if (!audioFile || !title.trim()) { setUploadError("음원 파일과 제목을 입력해 주세요."); return }
+    if (!window.confirm("음원을 비공개 임시 저장할까요? 저장 후 보이스 제공자를 초대할 수 있으며, AI 검증 및 블록체인 등록은 별도로 진행됩니다.")) return
     uploadLock.current = true
     setUploading(true)
     setUploadError("")
     setUploadedId(null)
     try {
-      await auth.me()
+      const currentUser = await auth.me()
       const form = new FormData()
       form.set("audio", audioFile)
       form.set("title", title.trim())
       form.set("prompt", prompt)
       form.set("workLog", workLog)
-      form.set("isPublic", "true")
+      form.set("isPublic", "false")
+      form.set("contributors", JSON.stringify([
+        ...(promptWeight > 0 ? [{ userId: currentUser.id, role: "PROMPT", percentage: promptWeight }] : []),
+        ...(editWeight > 0 ? [{ userId: currentUser.id, role: "EDIT", percentage: editWeight }] : []),
+      ]))
       const track = await api("/api/tracks", form)
       if (!Number.isInteger(track.id) || track.id <= 0) throw new Error("서버의 업로드 응답을 확인해 주세요.")
       setUploadedId(track.id)
@@ -464,16 +469,38 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const [promptWeight, setPromptWeight] = useState(70)
   const [voiceWeight, setVoiceWeight] = useState(20)
   const [voiceAddress, setVoiceAddress] = useState("")
-  const [voiceInvited, setVoiceInvited] = useState(false)
-  const [voiceSigned, setVoiceSigned] = useState(false)
+  const [voicePercent, setVoicePercent] = useState(20)
+  const [invitations, setInvitations] = useState<Array<{ id: number; email?: string | null; walletAddress?: string | null; percentage: string; status: string; delivery?: string }>>([])
+  const [inbox, setInbox] = useState<Array<{ id: number; track: { title: string }; percentage: string }>>([])
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteError, setInviteError] = useState("")
+  const [inviteInfo, setInviteInfo] = useState("")
+  const refreshInbox = async () => { try { setInbox(await api("/api/users/me/invitations")) } catch { /* unauthenticated */ } }
+  useEffect(() => { void refreshInbox() }, [])
+  useEffect(() => { if (uploadedId) void api(`/api/tracks/${uploadedId}/invitations`).then(setInvitations).catch(() => {}) }, [uploadedId])
   const [projectFile, setProjectFile] = useState("")
   const [failDemo, setFailDemo] = useState(false)
 
   const editWeight = 100 - promptWeight - voiceWeight
 
-  const handleInvite = () => {
-    setVoiceInvited(true)
-    setTimeout(() => setVoiceSigned(true), 4000)
+  const handleInvite = async () => {
+    if (!uploadedId) { setInviteError("먼저 음원을 임시 업로드해 주세요."); return }
+    setInviteBusy(true); setInviteError(""); setInviteInfo("")
+    try {
+      const address = voiceAddress.trim()
+      const payload = address.includes("@")
+        ? { email: address, role: "VOCAL", percentage: voicePercent }
+        : { walletAddress: address, role: "VOCAL", percentage: voicePercent }
+      const created = await api(`/api/tracks/${uploadedId}/invitations`, payload)
+      setInvitations(items => [...items, created])
+      setVoiceAddress("")
+      setInviteInfo(created.delivery === "EMAIL_SUBMITTED" ? "이메일 발송 서비스에 접수되었습니다." : "지갑 초대함에 등록되었습니다. 상대방의 수락을 기다려 주세요.")
+    } catch (error) { setInviteError(error instanceof Error ? error.message : "초대 실패") }
+    finally { setInviteBusy(false) }
+  }
+  const respondInvite = async (id: number, action: "accept" | "reject") => {
+    try { await api(`/api/invitations/${id}/${action}`, {}); await refreshInbox() }
+    catch (error) { setInviteError(error instanceof Error ? error.message : "응답 실패") }
   }
 
   const handleAIDone = (result: "pass" | "fail") =>
@@ -487,8 +514,9 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
   const handleReset = () => {
     setStage("idle")
     setFileName("")
-    setVoiceInvited(false)
-    setVoiceSigned(false)
+    setInvitations([])
+    setInviteInfo("")
+    setInviteError("")
     setVoiceAddress("")
     setFailDemo(false)
   }
@@ -700,7 +728,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
                   기여도 설정 (수익 분배 비율)
                 </label>
                 <span className="text-xs font-mono font-semibold text-emerald-400">
-                  합계: 100% ✓
+                  소유자 {100 - voiceWeight}% · 보이스 초대 예정 {voiceWeight}%
                 </span>
               </div>
               <div className="space-y-3">
@@ -757,46 +785,44 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
               </div>
             </div>
 
-            {/* Voice contributor invite */}
-            <div>
-              <label className="block text-xs font-medium text-[#9CA3AF] mb-1.5">
-                보이스 제공자 지갑 / 이메일 초대
-              </label>
-              <div className="flex gap-2">
-                <input
-                  value={voiceAddress}
-                  onChange={(e) => setVoiceAddress(e.target.value)}
-                  placeholder="0x... 또는 이메일 주소"
-                  className="flex-1 px-3 py-2 rounded-lg bg-[#1c2128] border border-[#30363d] text-sm text-white placeholder-[#9CA3AF] focus:outline-none focus:border-blue-500 font-mono text-xs transition-colors"
-                />
-                <button
-                  onClick={handleInvite}
-                  disabled={!voiceAddress || voiceInvited}
-                  className="px-3 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  합의 서명 초대
+            {/* Contributor invitations are real backend requests, never simulated signatures. */}
+            <div className="space-y-3">
+              <label className="block text-xs font-medium text-[#9CA3AF]">보이스 제공자 지갑 / 이메일 초대 (여러 명 가능)</label>
+              <p className="text-xs text-[#9CA3AF]">먼저 음원을 임시 업로드한 후 초대하세요. 초대 수락 전에는 기여도가 확정되지 않습니다.</p>
+              <div className="flex flex-wrap gap-2">
+                <input value={voiceAddress} onChange={e => setVoiceAddress(e.target.value)}
+                  placeholder="0x... 또는 이메일 주소" aria-label="초대 대상"
+                  className="flex-1 min-w-[180px] px-3 py-2 rounded-lg bg-[#1c2128] border border-[#30363d] text-xs text-white" />
+                <input type="number" min={0.01} max={100} step={0.01} value={voicePercent}
+                  onChange={e => setVoicePercent(Number(e.target.value))} aria-label="제공자 기여도 퍼센트"
+                  className="w-20 px-2 py-2 rounded-lg bg-[#1c2128] border border-[#30363d] text-xs text-white" />
+                <button onClick={() => void handleInvite()} disabled={!voiceAddress.trim() || !uploadedId || inviteBusy}
+                  className="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs disabled:opacity-40">
+                  {inviteBusy ? "초대 중…" : "초대 보내기"}
                 </button>
               </div>
-              {voiceInvited && (
-                <div
-                  className={`mt-2 flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg border transition-all ${
-                    voiceSigned
-                      ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400"
-                      : "bg-amber-500/5 border-amber-500/20 text-amber-400"
-                  }`}
-                >
-                  {voiceSigned
-                    ? "✓ 서명 완료 — 보이스 제공자가 기여도에 동의했습니다"
-                    : "⏳ 서명 대기 중 — 상대방의 합의 서명을 기다리고 있습니다"}
-                </div>
-              )}
+              {inviteInfo && <p role="status" className="text-xs text-emerald-400">{inviteInfo}</p>}
+              {inviteError && <p role="alert" className="text-xs text-red-400">{inviteError}</p>}
+              {invitations.reduce((sum, item) => sum + (item.status === "REJECTED" || item.status === "CANCELLED" ? 0 : Number(item.percentage)), 0) > voiceWeight && <p role="alert" className="text-xs text-red-400">보이스 기여도 배분을 초과했습니다.</p>}
+              {invitations.map(item => <div key={item.id} className="flex justify-between text-xs text-[#e6edf3] bg-[#1c2128] p-2 rounded">
+                <span>{item.email || item.walletAddress} · {item.percentage}%</span>
+                <span>{item.status === "ACCEPTED" ? "수락 완료" : item.status === "PENDING" ? "수락 대기" : item.status}</span>
+              </div>)}
+              {uploadedId && <button className="text-xs text-blue-400 underline" onClick={() => void api(`/api/tracks/${uploadedId}/invitations`).then(setInvitations).catch(e => setInviteError(String(e)))}>초대 상태 새로고침</button>}
             </div>
-
-            {/* Smart contract deploy notice */}
-            <p className="text-[10px] leading-relaxed text-[#6B7280] border-l-2 border-purple-500/30 pl-2.5 -mt-1">
-              💡 모든 기여자의 지갑 서명(동의)이 완료되어야 스마트 컨트랙트가
-              배포됩니다.
-            </p>
+            <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 space-y-2">
+              <div className="flex justify-between"><h3 className="text-xs font-semibold text-white">내가 받은 보이스 제공자 초대</h3>
+                <button className="text-xs text-blue-400" onClick={() => void refreshInbox()}>새로고침</button></div>
+              {inbox.length === 0 && <p className="text-xs text-[#9CA3AF]">대기 중인 초대가 없습니다.</p>}
+              {inbox.map(item => <div key={item.id} className="flex items-center justify-between gap-2 text-xs text-white">
+                <span>{item.track.title} · {item.percentage}%</span>
+                <div className="flex gap-2">
+                  <button className="text-emerald-400" onClick={() => void respondInvite(item.id, "accept")}>수락</button>
+                  <button className="text-red-400" onClick={() => void respondInvite(item.id, "reject")}>거절</button>
+                </div>
+              </div>)}
+            </div>
+            <p className="text-[10px] text-[#9CA3AF]">음원 업로드는 임시 저장입니다. 제공자 수락, 기여도 확정, 실제 AI 검증 및 온체인 등록은 별도 단계입니다.</p>
 
             {/* Optional project file */}
             <div>
@@ -1032,7 +1058,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
             {uploading ? "음원 업로드 중…" : uploadedId !== null ? "업로드 완료" : "음원 업로드"}
           </button>
           {uploadError && <p role="alert" className="text-sm text-red-400">{uploadError}</p>}
-          {uploadedId !== null && <p role="status" className="text-sm text-emerald-400">음원 업로드 완료 · ID: {uploadedId} (AI 검증·온체인 등록 전)</p>}
+          {uploadedId !== null && <p role="status" className="text-sm text-emerald-400">비공개 임시 저장 완료 · ID: {uploadedId} (기여자 동의·AI 검증·온체인 등록 전)</p>}
         </div>
       </div>
 
