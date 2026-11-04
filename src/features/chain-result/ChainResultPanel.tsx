@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { HOLD_POLICY, MOCK_NETWORK } from "../../shared/config/constants"
+import { HOLD_POLICY } from "../../shared/config/constants"
+import { NETWORK } from "../../shared/config/network"
 import type {
   ChainResult,
   FailureReason,
@@ -60,7 +61,7 @@ const AI_LABELS = {
 const SIGNATURE_LABELS = {
   NOT_REQUESTED: "미요청",
   RECEIVED: "서명 수신",
-  VERIFIED: "검증 확인 · 목업",
+  VERIFIED: "검증 확인",
   FAILED: "검증 실패",
 } as const
 
@@ -202,14 +203,14 @@ export default function ChainResultPanel({
               {mode === "REGISTER" ? "음원 등록 결과" : "라이선스 발급 결과"}
             </h3>
             <p className="mt-0.5 text-[9px] font-mono text-[#6B7280]">
-              {MOCK_NETWORK.name} · Chain ID {MOCK_NETWORK.chainId} ·{" "}
-              {MOCK_NETWORK.currencySymbol}
+              {NETWORK.name} · Chain ID {NETWORK.chainId} ·{" "}
+              {NETWORK.currencySymbol}
             </p>
           </div>
           <ValueBadge tone={aiTone}>{AI_LABELS[result.aiStatus]}</ValueBadge>
         </div>
         <div className="border-b border-blue-500/20 bg-blue-500/5 px-4 py-2 text-[9px] text-blue-300">
-          시나리오 미리보기 · 실제 거래 아님
+          거래 상태는 실제 Backend 및 온체인 영수증으로 확인해야 합니다.
         </div>
 
         <PanelRow label="AI 판정" description="모델 분석 결과">
@@ -451,9 +452,9 @@ export default function ChainResultPanel({
             <div className="mt-5 space-y-3 rounded-xl border border-[#21262d] bg-[#0d1117] p-4">
               {[
                 ["유형", mode === "REGISTER" ? "음원 등록" : "라이선스 구매"],
-                ["네트워크", `${MOCK_NETWORK.name} (${MOCK_NETWORK.chainId})`],
+                ["네트워크", `${NETWORK.name} (${NETWORK.chainId})`],
                 ["상태", TRANSACTION_LABELS[transactionStatus]],
-                ["통화", MOCK_NETWORK.currencySymbol],
+                ["통화", NETWORK.currencySymbol],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4 text-xs">
                   <span className="text-[#6B7280]">{label}</span>
