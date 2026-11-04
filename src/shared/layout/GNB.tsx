@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { auth } from "../../api"
 import { AuthError, type User } from "../../auth"
 import type { Screen } from "../types/domain"
-import HowItWorksModal from "../components/HowItWorksModal"
+import HowItWorksModal from "../components/PolicyHowItWorksModal"
 import WalletModal from "../../features/wallet-auth/WalletModal"
 import LoginModal from "../../features/auth/LoginModal"
 
