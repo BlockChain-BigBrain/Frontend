@@ -11,6 +11,11 @@ import { latestVerification, verificationPolicy, missingText } from "../verifica
 import { readRegistration, prepareRegistration, registrationPacket, type RegistrationState } from "../verification/registration"
 
 type UploadStage = "idle" | "signing"
+const configuredUploadMb = Number(import.meta.env.VITE_MAX_UPLOAD_MB ?? 50)
+const MAX_UPLOAD_MB = Number.isFinite(configuredUploadMb)
+  ? Math.min(100, Math.max(1, configuredUploadMb))
+  : 50
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 // ─── Upload Screen ──────────────────────────────────────────────────────────────
 export default function UploadScreen() {
@@ -126,8 +131,8 @@ export default function UploadScreen() {
     setRegistrationTxHash(null)
     setRegistrationInfo("")
     setRegistrationError("")
-    if (!/\.(mp3|wav|webm)$/i.test(file.name) || file.size > 100 * 1024 * 1024 || file.size === 0) {
-      setUploadError("100MB 이하의 비어 있지 않은 MP3, WAV 또는 WebM 파일을 선택해 주세요.")
+    if (!/\.(mp3|wav|webm)$/i.test(file.name) || file.size > MAX_UPLOAD_BYTES || file.size === 0) {
+      setUploadError(`${MAX_UPLOAD_MB}MB 이하의 비어 있지 않은 MP3, WAV 또는 WebM 파일을 선택해 주세요.`)
       return
     }
     setAudioFile(file)
