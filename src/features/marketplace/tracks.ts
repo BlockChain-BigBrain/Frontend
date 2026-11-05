@@ -1,17 +1,11 @@
 import { API_BASE } from "../../api/service"
 import { latestVerification, verificationPolicy } from "../verification/policy"
+import type { Verification } from "../verification/policy"
 
-export interface TrackVerification {
-  id?: number
-  trackId?: number
-  createdAt?: string
+export interface TrackVerification extends Verification {
   source: string
   status: string
   riskStatus?: string | null
-  riskScore?: number | string | null
-  duplicate?: boolean | null
-  modelVersion?: string | null
-  evidence?: { decision?: string; similarityScore?: number | null } | null
 }
 export interface PublicTrack {
   id: number
@@ -21,7 +15,7 @@ export interface PublicTrack {
   mimeType: string
   createdAt?: string
   owner?: { name: string }
-  contributions?: Array<{ userId: number }>
+  contributions?: Array<{ userId: number; role?: string; percentage?: string | number; user?: { nickname?: string; name?: string } }>
   registrationStatus?: string
   registrationTxHash?: string | null
   verifications?: TrackVerification[]
@@ -37,7 +31,10 @@ export function verificationView(track: PublicTrack) {
   if (policy.pending) return { label: "AI 검증 중", score: null }
   if (!policy.completed) return { label: "AI 검증 실패", score: null }
   if (policy.blocked) return { label: "동일 음원 감지", score: null }
-  return { label: policy.eligible ? policy.verdict! : "검증 결과 확인 필요", score: policy.score }
+  return { label: policy.eligible ? policy.verdict! : "검증 결과 확인 필요", score: policy.score,
+    queryVerifierScore: policy.queryVerifierScore, thresholds: policy.thresholds,
+    scoreVersion: policy.scoreVersion, decisionPolicyVersion: policy.decisionPolicyVersion,
+    similarTracks: policy.similarTracks }
 }
 
 export function audioUrl(track: PublicTrack) {

@@ -20,6 +20,7 @@ const EMPTY_RESULT: ChainResult = {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("marketplace")
+  const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null)
   const [walletConnected, setWalletConnected] = useState(false)
   const [showWalletModal, setShowWalletModal] = useState(false)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
@@ -29,12 +30,12 @@ export default function App() {
         setWalletConnected={setWalletConnected} showWalletModal={showWalletModal}
         setShowWalletModal={setShowWalletModal} showHowItWorks={showHowItWorks}
         setShowHowItWorks={setShowHowItWorks} />
-      {screen === "marketplace" && <MarketplaceScreen setScreen={setScreen} />}
-      {screen === "upload" && <UploadScreen chainResult={EMPTY_RESULT} />}
-      {screen === "detail" && <DetailScreen setScreen={setScreen} chainResult={EMPTY_RESULT} />}
+      {screen === "marketplace" && <MarketplaceScreen setScreen={setScreen} onSelectTrack={setSelectedTrackId} />}
+      {screen === "upload" && <UploadScreen />}
+      {screen === "detail" && <DetailScreen setScreen={setScreen} trackId={selectedTrackId} />}
       {screen === "dashboard" && <DashboardScreen chainResult={EMPTY_RESULT} onRecheckResult={() => {}} />}
       {screen === "checkout" && <CheckoutScreen setScreen={setScreen} chainResult={EMPTY_RESULT} onRecheckResult={() => {}} />}
-      {screen === "certificate" && <CertificateScreen setScreen={setScreen} chainResult={EMPTY_RESULT} />}
+      {screen === "certificate" && <CertificateScreen setScreen={setScreen} />}
     </div>
   )
 }

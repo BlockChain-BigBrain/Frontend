@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 let fixtureFetch: typeof globalThis.fetch
-import { SCENARIOS } from '../src/features/chain-result/scenarios'
+import { SCENARIOS } from './fixtures/chain-scenarios'
 const account = '0x1111111111111111111111111111111111111111'
 const cid = 'bafkreigh2akiscaildc6o6p2nhccz3u5c6afgzkgkbb37faqxnxm6woj5m'
 async function harness(verdict: string, status = 'VERIFIED', backendReady = true, defer = false, allowSend = false) {

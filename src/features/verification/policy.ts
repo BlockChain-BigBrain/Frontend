@@ -13,6 +13,24 @@ export interface Verification {
     decision?: string
     duplicate?: { detected?: boolean; matchedTrackId?: string | null }
     similarityScore?: number | null
+    queryVerifierScore?: number | null
+    scoreVersion?: string
+    decisionPolicyVersion?: string
+    corpusVersion?: string
+    thresholds?: { warn?: number; hold?: number }
+    similarTracks?: Array<{
+      trackId?: string
+      score?: number
+      fusionScore?: number
+      verifierScore?: number
+      matchedSegments?: Array<{
+        queryStartSec?: number
+        queryEndSec?: number
+        refStartSec?: number
+        refEndSec?: number
+        score?: number
+      }>
+    }>
     reviewRequired?: boolean
     queryWindowCount?: number
   } | null
@@ -51,7 +69,16 @@ export function verificationPolicy(v?: Verification | null) {
   const raw = v?.evidence ? v.evidence.similarityScore : v?.riskScore
   const numeric = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : NaN
   const score = completed && !blocked && Number.isFinite(numeric) && numeric >= 0 && numeric <= 1 ? numeric : null
+  const queryRaw = v?.evidence?.queryVerifierScore
+  const queryNumeric = typeof queryRaw === 'number' ? queryRaw : NaN
+  const queryVerifierScore = completed && !blocked && Number.isFinite(queryNumeric) && queryNumeric >= 0 && queryNumeric <= 1 ? queryNumeric : null
   return { completed, verdict, blocked: completed && blocked, pending, failed, eligible, heading, description, score,
+    queryVerifierScore,
+    scoreVersion: completed ? v?.evidence?.scoreVersion ?? null : null,
+    decisionPolicyVersion: completed ? v?.evidence?.decisionPolicyVersion ?? null : null,
+    corpusVersion: completed ? v?.evidence?.corpusVersion ?? null : null,
+    thresholds: completed ? v?.evidence?.thresholds ?? null : null,
+    similarTracks: completed && !blocked ? v?.evidence?.similarTracks ?? [] : [],
     purchasable: eligible && verdict !== 'HOLD' && v?.evidence?.reviewRequired !== true,
     matchedTrackId: completed && blocked ? v?.evidence?.duplicate?.matchedTrackId : null,
     windowNote: completed && v?.evidence?.queryWindowCount === 0 ? 'CLAP 분석 구간 수가 0으로 보고되었습니다. 유사도는 미산출이며 내부 처리 사유는 이 결과만으로 확인할 수 없습니다.' : null }

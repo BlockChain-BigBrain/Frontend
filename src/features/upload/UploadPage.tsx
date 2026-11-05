@@ -2,20 +2,18 @@ import { auth } from "../../api"
 import { AuthError } from "../../auth"
 import { api, sendTransaction, savePending, readPending, confirmPending, connectWallet } from "../../api/service"
 import { useEffect, useRef, useState } from "react"
-import ChainResultPanel from "../chain-result/ChainResultPanel"
 import Badge from "../../shared/components/Badge"
 import Waveform from "../../shared/components/Waveform"
-import type { ChainResult } from "../../shared/types/domain"
 import { NETWORK } from "../../shared/config/network"
 import { switchToHardhat } from "../../wallet"
 import VerificationNotice from "../verification/VerificationNotice"
 import { latestVerification, verificationPolicy, missingText } from "../verification/policy"
 import { readRegistration, prepareRegistration, registrationPacket, type RegistrationState } from "../verification/registration"
 
-type UploadStage = "idle" | "ai_checking" | "ai_pass" | "ai_fail" | "signing" | "done"
+type UploadStage = "idle" | "signing"
 
 // ─── Upload Screen ──────────────────────────────────────────────────────────────
-export default function UploadScreen({ chainResult }: { chainResult: ChainResult }) {
+export default function UploadScreen() {
   const [stage, setStage] = useState<UploadStage>("idle")
   const [dragging, setDragging] = useState(false)
   const [fileName, setFileName] = useState("")
@@ -228,7 +226,9 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
         setRegistrationInfo("기존 트랜잭션을 확인하는 중입니다.")
         await confirmPending(user.id, pending)
       } else {
+        setStage("signing")
         const hash = await sendTransaction(packet.transaction)
+        setStage("idle")
         const record = { hash, endpoint, body: {}, label: "음원 온체인 등록" }
         savePending(user.id, record)
         if (isCurrent()) { setRegistrationTxHash(hash); setRegistrationInfo("거래가 전송되었습니다. 블록 확인과 DB 반영을 기다리는 중입니다.") }
@@ -241,7 +241,7 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
         // A newer BLOCK/failure may have arrived since the button was enabled.
         try { await refreshRegistration(id, version) } catch { /* keep registration disabled */ }
       }
-    } finally { registrationLock.current = false; setRegistrationBusy(false) }
+    } finally { setStage("idle"); registrationLock.current = false; setRegistrationBusy(false) }
   }
 
   const handleReset = () => {
@@ -259,10 +259,6 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
     setVoiceAddress("")
 
   }
-
-  // Legacy demo-only stages never produce real AI or chain outcomes.
-  if (stage === "ai_checking" || stage === "ai_pass" || stage === "ai_fail")
-    return <p role="status" className="px-6 pt-24 text-white">실제 AI 검증 결과를 기다려 주세요.</p>
 
   return (
     <div className="pt-14 min-h-screen">
@@ -824,61 +820,6 @@ export default function UploadScreen({ chainResult }: { chainResult: ChainResult
         </div>
       )}
 
-      {stage === "done" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="max-h-[88vh] w-[700px] overflow-y-auto rounded-2xl border border-[#30363d] bg-[#161b22] p-6 shadow-2xl">
-            <div
-              className={`w-14 h-14 rounded-full border flex items-center justify-center mx-auto mb-4 ${
-                chainResult.registrationStatus === "CONTRACT_REJECTED" ||
-                chainResult.registrationStatus === "ERROR"
-                  ? "bg-red-500/10 border-red-500/20"
-                  : chainResult.aiStatus === "HOLD"
-                    ? "bg-amber-500/10 border-amber-500/20"
-                    : "bg-emerald-500/10 border-emerald-500/20"
-              }`}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M5 13L9 17L19 7"
-                  stroke={
-                    chainResult.registrationStatus === "CONTRACT_REJECTED" ||
-                    chainResult.registrationStatus === "ERROR"
-                      ? "#ef4444"
-                      : chainResult.aiStatus === "HOLD"
-                        ? "#f59e0b"
-                        : "#10b981"
-                  }
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div className="mb-5 text-center">
-              <h3 className="text-base font-semibold text-white">
-                {chainResult.registrationStatus === "CONTRACT_REJECTED" ||
-                chainResult.registrationStatus === "ERROR"
-                  ? "음원 등록 실패"
-                  : chainResult.aiStatus === "HOLD"
-                    ? chainResult.onchainTrackId !== undefined
-                      ? "HOLD 기록 완료 · 구매 제한"
-                      : "HOLD · 등록 보류"
-                    : "음원 등록 완료"}
-              </h3>
-              <p className="mt-1 text-sm text-[#9CA3AF]">
-                {NETWORK.name} 음원 등록 상태를 확인하세요.
-              </p>
-            </div>
-            <ChainResultPanel result={chainResult} mode="REGISTER" />
-            <button
-              onClick={handleReset}
-              className="mt-5 w-full py-2.5 rounded-xl bg-[#1c2128] hover:bg-[#21262d] border border-[#30363d] text-white text-sm font-medium transition-colors"
-            >
-              새 음원 업로드
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

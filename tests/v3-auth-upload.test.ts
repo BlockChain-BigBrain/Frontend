@@ -16,6 +16,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
     const path = new URL(String(url)).pathname; calls.push(path);
     if (path.endsWith('/refresh')) return response({ result: { accessToken: 'fixture' } });
     if (path.endsWith('/me')) return signedIn ? response({ result: { id: 1, nickname: 'Creator', email: 'test@example.test' } }) : response({}, 401);
+    if (path === '/api/users/me/wallet') return response({ walletAddress: null });
     if (path.endsWith('/logout')) { signedIn = false; return response({}); }
     if (path.includes('/invitations')) return response([]);
     assert.equal(path, '/api/tracks');
@@ -32,7 +33,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
   const { createRoot } = await import('react-dom/client');
   const { default: GNB } = await import('../src/shared/layout/GNB');
   const { default: Upload } = await import('../src/features/upload/UploadPage');
-  const { SCENARIOS } = await import('../src/features/chain-result/scenarios');
+  const { SCENARIOS } = await import('./fixtures/chain-scenarios');
   const root = createRoot(document.getElementById('root')!);
   const noop = () => {};
   await act(async () => root.render(createElement('div', {}, createElement(GNB, { screen: 'upload', setScreen: noop, walletConnected: false, setWalletConnected: noop, showWalletModal: false, setShowWalletModal: noop, showHowItWorks: false, setShowHowItWorks: noop }), createElement(Upload, { chainResult: SCENARIOS['success-pass'].result }))));
@@ -51,7 +52,7 @@ test("v3 restores login, uploads the actual file, reports failure and logs out w
   await act(async () => button().click());
   assert.equal(uploaded, 2);
   assert.match(document.querySelector('[role=status]')!.textContent!, /ID: 42/);
-  assert.equal(calls.some(p => /verify|metadata|registration|wallet/.test(p)), false);
+  assert.equal(calls.some(p => /verify|metadata|registration|wallet\/challenge/.test(p)), false);
   await act(async () => Array.from(document.querySelectorAll('button')).find(b => b.textContent === '로그아웃')!.click());
   assert.match(document.body.textContent!, /로그인/);
   await act(async () => root.unmount());

@@ -1,5 +1,5 @@
-import { HOLD_POLICY } from "../../shared/config/constants"
-import type { ChainResult } from "../../shared/types/domain"
+import { HOLD_POLICY } from "../../src/shared/config/constants"
+import type { ChainResult } from "../../src/shared/types/domain"
 
 export type ScenarioId =
   | "checking"
