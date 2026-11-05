@@ -2,18 +2,28 @@ import { NETWORK } from "../config/network"
 
 export default function PolicyHowItWorksModal({ onClose }: { onClose: () => void }) {
   const steps = [
-    { num: "01", title: "AI 음악 관계 검증", desc: "Chromaprint로 정확 중복을 먼저 확인합니다. 중복이 아니면 10초 창·5초 간격으로 Layer 2 후보를 검색하고 CLAP·pitch·rhythm·chroma·시간 정렬 특징을 결합합니다.", icon: "🔍", color: "#2f80ed" },
-    { num: "02", title: "검증 결과와 증거 보존", desc: "query-level verifier와 pairwise temporal score를 분리해 보존합니다. 후보 원곡, 매칭 구간, 모델 버전, 정책 버전, threshold를 함께 기록합니다.", icon: "🧾", color: "#7c3aed" },
-    { num: "03", title: "정책 판정 및 라이선스 흐름", desc: "정확 중복은 BLOCK, WARN 기준 이상은 추가 검토, HOLD 기준 이상은 사람 검토 전까지 보류합니다. PASS는 두 Layer 2 기준 모두 미만인 경우입니다.", icon: "✓", color: "#10b981" },
+    { num: "01", title: "실제 음원 검증", desc: "백엔드가 음원 지문 중복을 확인하고 설정된 원격 AI 서비스에 검증을 요청합니다. AI 서버는 프론트엔드에서 직접 호출하지 않습니다.", color: "#2f80ed" },
+    { num: "02", title: "응답 근거 표시", desc: "판정, similarity score, query verifier score, 후보 매칭 구간, 모델·정책 버전은 실제 검증 응답에 있는 값만 표시합니다.", color: "#7c3aed" },
+    { num: "03", title: "등록 전 지갑 확인", desc: `기여도 확정과 서버 등록 준비를 확인한 뒤 MetaMask에서 ${NETWORK.name} 계정으로 거래를 승인합니다. 등록 성공은 거래 해시만으로 표시하지 않으며 영수증과 백엔드 확인이 끝나야 합니다.`, color: "#10b981" },
   ]
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[#161b22] border border-[#30363d] rounded-2xl w-[620px] max-w-[calc(100vw-2rem)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-6"><h3 className="text-base font-bold text-white">서비스 작동 방식</h3><button onClick={onClose} className="text-[#9CA3AF] hover:text-white" aria-label="닫기">×</button></div>
-        <div className="space-y-4">{steps.map((s, i) => <div key={s.num} className="flex gap-4"><div className="flex flex-col items-center gap-1 flex-shrink-0"><div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg border" style={{ background: `${s.color}15`, borderColor: `${s.color}40` }}>{s.icon}</div>{i < steps.length - 1 && <div className="w-px flex-1 bg-[#21262d] min-h-[22px]" />}</div><div className="pb-4"><div className="flex items-center gap-2 mb-1"><span className="text-[10px] font-mono" style={{ color: s.color }}>Step {s.num}</span><span className="text-sm font-semibold text-white">{s.title}</span></div><p className="text-xs text-[#9CA3AF] leading-relaxed">{s.desc}</p></div></div>)}</div>
-        <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><div className="text-xs font-semibold text-amber-300 mb-2">한계와 안내</div><ul className="text-xs text-[#c9d1d9] space-y-1.5 list-disc pl-4"><li>WARN/HOLD는 음향적 관계 후보이며 법적 표절 판정이 아닙니다.</li><li>WARN은 query-level verifier, HOLD는 pairwise temporal score를 기준으로 판정합니다. 실제 임계값은 AI 검증 결과의 정책 정보를 확인하세요.</li><li>HOLD 결과는 원본 구간과 증거를 확인한 뒤 등록·판매 여부를 결정합니다.</li></ul></div>
-        <div className="mt-5 pt-4 border-t border-[#21262d] text-xs text-[#9CA3AF] font-mono">scoreVersion: hybrid_query_top3_pairwise_hold-v5 · policy: track-ai-balanced-policy-v5-20261102 · network: {NETWORK.name}</div>
-      </div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
+      <section role="dialog" aria-modal="true" aria-labelledby="policy-modal-title" className="w-full max-w-2xl rounded-2xl border border-[#30363d] bg-[#161b22] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="mb-6 flex items-center justify-between">
+          <div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Track-AI · {NETWORK.name}</p><h2 id="policy-modal-title" className="mt-1 text-lg font-bold text-white">검증과 온체인 등록</h2></div>
+          <button type="button" onClick={onClose} aria-label="닫기" className="rounded-lg border border-[#30363d] px-2.5 py-1.5 text-sm text-[#9CA3AF] hover:text-white">×</button>
+        </div>
+        <ol className="space-y-4">
+          {steps.map((step) => <li key={step.num} className="flex gap-4 rounded-xl border border-[#30363d] bg-[#0d1117] p-4">
+            <span className="font-mono text-xs" style={{ color: step.color }}>{step.num}</span>
+            <div><h3 className="text-sm font-semibold text-white">{step.title}</h3><p className="mt-1 text-xs leading-6 text-[#9CA3AF]">{step.desc}</p></div>
+          </li>)}
+        </ol>
+        <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-6 text-[#c9d1d9]">
+          AI 판정은 음원 유사성 검토 근거이며 법적 권리 판단이 아닙니다. WARN과 HOLD의 점수 기준은 서로 다른 값입니다. 음원별 실제 기준과 정책 버전은 검증 응답에서 확인할 수 있을 때만 표시합니다.
+        </div>
+      </section>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import type { Screen } from "../types/domain"
 import HowItWorksModal from "../components/PolicyHowItWorksModal"
 import WalletModal from "../../features/wallet-auth/WalletModal"
 import LoginModal from "../../features/auth/LoginModal"
+import { api } from "../../api/service"
 
 // ─── GNB ───────────────────────────────────────────────────────────────────────
 export default function GNB({
@@ -33,17 +34,59 @@ export default function GNB({
   const [showLoginModal, setShowLoginModal] = useState(false)
   useEffect(() => {
     let active = true
-    auth.me().then(value => { if (active) setUser(value) }).catch(error => {
+    auth.me().then(async value => {
+      if (!active) return
+      setUser(value)
+      try {
+        const bound = await api("/api/users/me/wallet")
+        if (!active) return
+        const address = typeof bound?.walletAddress === "string" ? bound.walletAddress : ""
+        setWalletAddress(address)
+        const provider = (window as Window & { ethereum?: { request(args: { method: string }): Promise<unknown> } }).ethereum
+        const accounts = address && provider ? await provider.request({ method: "eth_accounts" }) : []
+        if (active) setWalletConnected(Array.isArray(accounts) && accounts.some(
+          (account) => typeof account === "string" && account.toLowerCase() === address.toLowerCase(),
+        ))
+      } catch {
+        if (active) { setWalletAddress(""); setWalletConnected(false) }
+      }
+    }).catch(error => {
       if (active && !(error instanceof AuthError)) setAuthError(error.message)
     }).finally(() => { if (active) setAuthLoading(false) })
     return () => { active = false }
   }, [])
+  useEffect(() => {
+    type EventWallet = {
+      on?: (event: string, listener: (value: unknown) => void) => void
+      removeListener?: (event: string, listener: (value: unknown) => void) => void
+    }
+    const provider = (window as Window & { ethereum?: EventWallet }).ethereum
+    if (!provider?.on) return
+    const onAccountsChanged = (value: unknown) => {
+      const accounts = Array.isArray(value) ? value : []
+      setWalletConnected(!!walletAddress && accounts.some(
+        (account) => typeof account === "string" && account.toLowerCase() === walletAddress.toLowerCase(),
+      ))
+    }
+    provider.on("accountsChanged", onAccountsChanged)
+    return () => provider.removeListener?.("accountsChanged", onAccountsChanged)
+  }, [walletAddress, setWalletConnected])
   async function passwordLogin(email: string, password: string) {
     setAuthError("")
     await auth.passwordAuth(email, password)
     try {
       const currentUser = await auth.me()
       setUser(currentUser)
+      try {
+        const bound = await api("/api/users/me/wallet")
+        const address = typeof bound?.walletAddress === "string" ? bound.walletAddress : ""
+        setWalletAddress(address)
+        const provider = (window as Window & { ethereum?: { request(args: { method: string }): Promise<unknown> } }).ethereum
+        const accounts = address && provider ? await provider.request({ method: "eth_accounts" }) : []
+        setWalletConnected(Array.isArray(accounts) && accounts.some(
+          (account) => typeof account === "string" && account.toLowerCase() === address.toLowerCase(),
+        ))
+      } catch { setWalletAddress(""); setWalletConnected(false) }
     } catch (error) {
       setUser(null)
       throw error
@@ -135,6 +178,15 @@ export default function GNB({
                 {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "연결됨"}
               </span>
             </div>
+          ) : walletAddress ? (
+            <button
+              type="button"
+              onClick={() => setShowWalletModal(true)}
+              title={`백엔드에 연결된 주소 ${walletAddress}; 현재 MetaMask 계정과 일치하지 않거나 지갑이 연결되지 않았습니다.`}
+              className="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-300"
+            >
+              소유 확인됨 · MetaMask 연결 필요
+            </button>
           ) : (
             <button
               onClick={() => { if (!user) setShowLoginModal(true); else setShowWalletModal(true) }}

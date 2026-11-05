@@ -6,7 +6,7 @@ import TrackCard from "./TrackCard"
 import type { PublicTrack } from "./tracks"
 
 // ─── Marketplace ────────────────────────────────────────────────────────────────
-export default function MarketplaceScreen(_props: { setScreen: (s: Screen) => void }) {
+export default function MarketplaceScreen({ setScreen, onSelectTrack }: { setScreen: (s: Screen) => void; onSelectTrack: (id: number) => void }) {
   const [search, setSearch] = useState("")
   const [liveTracks, setLiveTracks] = useState<PublicTrack[]>([])
   const [liveError, setLiveError] = useState("")
@@ -48,6 +48,9 @@ export default function MarketplaceScreen(_props: { setScreen: (s: Screen) => vo
     (filter === "All" || (filter === "MP3" ? t.mimeType === "audio/mpeg" : filter === "WebM" ? t.mimeType?.endsWith("/webm") : t.mimeType === "audio/wav")) &&
     t.title.toLowerCase().includes(search.toLowerCase()),
   )
+
+  const aiChecked = liveTracks.filter(track => track.verifications?.some(verification => verification.source === "AI")).length
+  const registered = liveTracks.filter(track => track.registrationStatus === "REGISTERED" && !!track.registrationTxHash).length
 
   return (
     <div className="pt-14 min-h-screen">
@@ -108,8 +111,8 @@ export default function MarketplaceScreen(_props: { setScreen: (s: Screen) => vo
         <div className="max-w-6xl mx-auto px-6 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-mono text-[#9CA3AF]">
           {[
             ["공개 음원", String(total)],
-            ["AI 검증", "미연결"],
-            ["온체인 등록", "자동 실행 안 함"],
+            ["AI 검증 확인", `${aiChecked} / ${liveTracks.length}`],
+            ["영수증 확인 등록", String(registered)],
           ].map(([k, v]) => (
             <div key={k} className="flex items-center gap-2">
               <span>{k}</span>
@@ -159,7 +162,7 @@ export default function MarketplaceScreen(_props: { setScreen: (s: Screen) => vo
         {liveError && <p role="alert" className="py-10 text-center text-red-400">서버 연결 오류: {liveError}</p>}
         {!liveLoading && !liveError && filtered.length === 0 && <p role="status" className="py-16 text-center rounded-xl border border-[#21262d] text-[#9CA3AF]">{liveTracks.length ? "검색 조건에 맞는 음원이 없습니다." : "공개된 음원이 아직 없습니다. Upload에서 첫 음원을 등록해 주세요."}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {!liveLoading && !liveError && filtered.map(track => <TrackCard key={track.id} track={track} />)}
+          {!liveLoading && !liveError && filtered.map(track => <TrackCard key={track.id} track={track} onOpen={() => { onSelectTrack(track.id); setScreen("detail") }} />)}
         </div>
         {total > 20 && <div className="flex justify-center gap-4 mt-6 text-sm text-white">
           <button disabled={page === 1 || liveLoading} onClick={() => setPage(p => p - 1)}>이전</button>

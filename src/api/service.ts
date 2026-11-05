@@ -66,26 +66,41 @@ export async function passwordAuth(
   const value = await response.json()
   if (!response.ok) throw new Error(value.message || "인증에 실패했습니다.")
 }
+export type WalletConnectStage =
+  | "account-prompt"
+  | "challenge-request"
+  | "signature-prompt"
+  | "signature-verification"
+  | "complete"
+
 export async function connectWallet(
   provider = browserWallet(),
+  onStage?: (stage: WalletConnectStage) => void,
 ): Promise<string> {
+  onStage?.("account-prompt")
   const accounts = await provider.request({ method: "eth_requestAccounts" })
   if (!Array.isArray(accounts) || !/^0x[0-9a-f]{40}$/i.test(accounts[0]))
     throw new Error("지갑 계정을 확인해 주세요.")
   const address = accounts[0]
+  onStage?.("challenge-request")
   const challenge = await api("/api/users/me/wallet/challenge", {
     walletAddress: address,
   })
+  if (typeof challenge?.message !== "string" || !challenge.message)
+    throw new Error("Wallet challenge response is invalid")
   const messageHex =
     "0x" +
     Array.from(new TextEncoder().encode(challenge.message))
       .map((x) => x.toString(16).padStart(2, "0"))
       .join("")
+  onStage?.("signature-prompt")
   const signature = await provider.request({
     method: "personal_sign",
     params: [messageHex, address],
   })
+  onStage?.("signature-verification")
   await api("/api/users/me/wallet", { signature })
+  onStage?.("complete")
   return address
 }
 export interface PendingTransaction {
